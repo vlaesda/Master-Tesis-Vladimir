@@ -1,0 +1,1141 @@
+
+
+#-----------------------------------------------------------------------
+#--------------- genMUT metil groups
+#-----------------------------------------------------------------------
+
+
+#-------- **FILTERING MATRIX GenMUT**
+
+###**Selec 2 mutGroups>=5 patients**
+
+
+PvalFCmut_NoNA
+```{r}
+# MatrixList_total_notNA$"2Groups5pat" <- apply(MatrixList_total_notNA[, c("mut_low", "mut_med", "mut_high")], 1, function(x) sum(x >= 5) >= 2)
+
+
+PvalFCmut_5pat <- PvalFCmut_NoNA[rowSums(PvalFCmut_NoNA[, c("g_mut_low", "g_mut_med", "g_mut_high")] >= 5) >= 2, ]
+
+# save(PvalFCmut_5pat, file ="~/vlad/TFM_bioinf/RESULTS/PvalFCmut_5pat.rda")
+# load("~/vlad/TFM_bioinf/RESULTS/PvalFCmut_5pat.rda")
+
+dim(PvalFCmut_5pat)
+```
+1537   26
+
+View(PvalFCmut_5pat)
+View(PvalFCmut_5pat0.2_filter75_005[, c(1:12, 25)])
+
+####>*PvalFCmut_5pat*
+
+
+###**Select <0.05 + 5pat en mismo nivel + and another one >0.2**
+*Select rows at least one level <0.05 and one >0.2*
+
+
+0.05 + 5pat en mismo nivel + algún 0.2
+```{r}
+cond1 <- (PvalFCmut_5pat[, "g_pval_low"] < 0.05 & PvalFCmut_5pat[, "g_mut_low"] > 4) | (PvalFCmut_5pat[, "g_pval_med"] < 0.05 & PvalFCmut_5pat[, "g_mut_med"] > 4) | (PvalFCmut_5pat[, "g_pval_high"] < 0.05 & PvalFCmut_5pat[, "g_mut_high"] > 4)
+
+cond2 <- rowSums(PvalFCmut_5pat[, c("g_pval_low", "g_pval_med", "g_pval_high")] > 0.2, na.rm = T) >= 1
+
+# Aplicar ambas condiciones para filtrar el dataframe
+PvalFCmut_5pat0.2 <- PvalFCmut_5pat[cond1 & cond2, ]
+
+dim(PvalFCmut_5pat0.2)
+```
+718  26
+####>*PvalFCmut_5pat0.2*
+
+
+
+
+###**pval <0.05 and FC out range**
+*Select rows at least one level <0.05 and one FC out range*
+
+ >log2(1.5) ..........0.5849625
+ <-log2(1.5).........-0.5849625
+ 
+ *El cálculo de foldchanges se hizo sobre con la estandarización log2 de la expresión génica, por lo que si queremos eliminar las expresiones del rango "+/-1,5" tenemos que aplicar el log2 a este valor para que el rango sea correcto.*
+ 
+ 
+```{r}
+# Crea una nueva matriz que contenga solo las filas que cumplen al menos una de las tres condiciones
+
+#tratar los valores NA como si no cumplieran la condición (es decir, como FALSE), puedes usar la función is.na() en combinación con la negación ! para verificar si los valores son NA y revertir el resultado. De este modo, los valores NA se tratarán como FALSE y todos los demás valores se evaluarán según las condiciones originales.
+
+PvalFCmut_5pat0.2_filter<- PvalFCmut_5pat0.2[
+  (((!is.na(PvalFCmut_5pat0.2[,"g_FC_low"]) & (PvalFCmut_5pat0.2[,"g_FC_low"] < -0.58 | PvalFCmut_5pat0.2[,"g_FC_low"] > 0.58)) & !is.na(PvalFCmut_5pat0.2[,"g_pval_low"]) & PvalFCmut_5pat0.2[,"g_pval_low"] <= 0.05) |
+  ((!is.na(PvalFCmut_5pat0.2[,"g_FC_med"]) & (PvalFCmut_5pat0.2[,"g_FC_med"] < -0.58 | PvalFCmut_5pat0.2[,"g_FC_med"] > 0.58)) & !is.na(PvalFCmut_5pat0.2[,"g_pval_med"]) & PvalFCmut_5pat0.2[,"g_pval_med"] <= 0.05) |
+  ((!is.na(PvalFCmut_5pat0.2[,"g_FC_high"]) & (PvalFCmut_5pat0.2[,"g_FC_high"] < -0.58 | PvalFCmut_5pat0.2[,"g_FC_high"] > 0.58)) & !is.na(PvalFCmut_5pat0.2[,"g_pval_high"]) & PvalFCmut_5pat0.2[,"g_pval_high"] <= 0.05)),
+]
+
+dim(PvalFCmut_5pat0.2_filter)
+```
+704  26
+####>*PvalFCmut_5pat0.2_filter*
+
+View(PvalFCmut_5pat0.2_filter)
+
+
+
+
+#--------**Final Filters**
+
+####**Select 75% FC variation + pval<0.05 + pval>0.2**
+*bought in the same level*
+
+PvalFCmut_5pat0.2_filter
+
+```{r}
+# Condición a cumplir
+condition_low <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_low"]) >= 0.75 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_low"] < 0.05
+
+condition_med <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_med"]) >= 0.75 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_med"] < 0.05
+
+condition_high <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_high"]) >= 0.75 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_high"] < 0.05
+
+condition1 <- condition_low | condition_med | condition_high
+
+# Condición a no cumplir
+condition2_low <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_low"]) <= 0.5 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_low"] > 0.2
+
+condition2_med <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_med"]) <= 0.5 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_med"] > 0.2
+
+condition2_high <- abs(PvalFCmut_5pat0.2_filter[, "g_FC_high"]) <= 0.5 * abs(PvalFCmut_5pat0.2_filter[, "g_FC_All"]) & PvalFCmut_5pat0.2_filter[, "g_pval_high"] > 0.2
+
+condition2 <- condition2_low | condition2_med | condition2_high
+
+# Crear el nuevo dataframe filtrado
+#PvalFCmut_5pat0.2_filter50_005 <- PvalFCmut_5pat0.2_filter[condition, ]...no elimina las filas, las hace NA.
+# Cuando se utiliza [condition, ] con el DataFrame original, se seleccionan las filas del DataFrame original donde condition es TRUE.
+
+
+PvalFCmut_5pat0.2_filter75_005_02 <- subset(PvalFCmut_5pat0.2_filter, condition1 & condition2)
+
+dim(PvalFCmut_5pat0.2_filter75_005_02)
+
+```
+340  26
+
+> length(intersect(rownames(PvalFCmut_5pat0.2_filter75_005_02), rownames(PvalFCmut_5pat0.2_filter75_005)))
+
+
+#####>*PvalFCmut_5pat0.2_filter75_005_02*
+
+View(PvalFCmut_5pat0.2_filter75_005[, c(1:12, 25)])
+
+
+```{r}
+# Guardar la matriz en un archivo RDS
+saveRDS(PvalFCmut_5pat0.2_filter75_005_02, file = "~/vlad/TFM_bioinf/RESULTS/PvalFC_metilMUT_5pat0.2_filter75_005_02.rds")
+# Cargar la matriz desde el archivo RDS
+# PvalFCmut_5pat0.2_filter75_005_02 <- readRDS("~/vlad/TFM_bioinf/RESULTS/PvalFC_metilMUT_5pat0.2_filter75_005_02.rds")
+```
+
+
+
+
+
+#--------**BOXPLOT GenesMut**
+
+###**Total patients + wt/mut boxplot**
+*Use name rows PvalFCmut_5pat0.2_filter in the loop* 
+
+
+mutations_filter4_patCpG ..............pacientes filtrados
+*mutations_filter4_patCpG_notABC2*
+
+*Crear los grupos mut/wt con la selección de pacientes:*
+Previamente hemos eliminado los datos de pacientes que no coinciden entre los dataset Patients_valCpG y mutations_filter2$patient. Así evitamos que en el recuento de pacientes para cada nivel de metilación aparezcan grupos en los que no existen todos los pacientes.......................
+
+También hemos eliminado las muestras repetidas (quedandonos con la última en cada caso) para los Tumor_Barcode_Sample de 16 caracteres (...A,B,C).
+
+Functions to get patients: ........En el LOOP.
+####>*mutations_filter4_patCpG_notABC3*
+
+
+
+Bucle:
+
+PvalFCmut_5pat0.2_filter75_005
+
+---------------------------Modificado:
+```{r}
+pdf("~/vlad/TFM_bioinf/IMG/PvalFCgenSD_CpG_notABC3_75_005_02g.pdf", width=6, height=10)
+
+# Crear una figura con varios paneles
+par(mfrow = c(4,3), mar = c(3,2,2,1), oma = c(1,1,1,1))
+
+
+for (row_name in rownames(PvalFCmut_5pat0.2_filter75_005_02)) {
+  
+  #El uso de [[1]] se debe a que strsplit() devuelve una lista de vectores de caracteres. Al utilizar [[1]], accedemos al primer elemento de la lista, que es el vector de caracteres con las partes separadas. A partir de ahí, podemos extraer el primer nombre utilizando split_name[1] y el segundo nombre utilizando split_name[2].
+  
+  # Extract names from rownames
+  split_name <- strsplit(row_name, "_")[[1]]
+  GenMut <- split_name[1]
+  GenSD <- split_name[2]
+
+  
+  
+  
+  # # Seleccionar los pacientes mutados y no mutados para el gen g en la matriz de expresión original
+
+  # Cambiamos dataset mutations_filter2 a mutations_filter3_patCpG:
+  mutpatients <- getMutatedPatients(GenMut, mutations_filter4_patCpG_notABC3)
+  wtpatients <- getWildtypePatients(GenMut, mutations_filter4_patCpG_notABC3)
+  
+
+  
+  metil_MutPatients <- mediasCpG_genesMut[substr(rownames(mediasCpG_genesMut), 1, 16) %in% substr(mutpatients, 1, 16), GenMut]
+  metil_WtPatients <- mediasCpG_genesMut[substr(rownames(mediasCpG_genesMut), 1, 16) %in% substr(wtpatients, 1, 16), GenMut]
+
+  # Eliminamos Na
+  metil_MutPatients <- metil_MutPatients[complete.cases(metil_MutPatients)]
+  metil_WtPatients <- metil_WtPatients[complete.cases(metil_WtPatients)]
+  
+  # Clasificación de metilación (PATIENTS GROUPS BY METILATION LEVEL)
+  metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+  metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+  
+  metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+  metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+  
+  metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+  metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+  
+  exprData <- list() # lista para guardar la expr wt/mut x nivel
+  pvalues <- list()  # lista para guardar los p-valores
+  foldchanges <- list()  # lista para guardar los FC
+  
+  
+  # Selección de todos los pacientes mutados y no mutados
+  
+  allExprOfMutPatients <- NULL
+  allExprOfWtPatients <- NULL
+  
+  # # Obtenemos listado nombres pacientes totales wt/mut con datos de metilación:
+  # nombres_cortos <- substr(names(metil_MutPatients), 1, 16)
+  # nombres_cortos <- substr(names(metil_WtPatients), 1, 16)
+  
+  # Obtenemos expresiones:
+  allExprOfMutPatients <- log2(expr_filter90[substr(names(metil_MutPatients), 1, 16), GenSD] + 1)
+  allExprOfWtPatients <- log2(expr_filter90[substr(names(metil_WtPatients), 1, 16), GenSD] + 1)
+
+  exprData[["All.Mut"]] <- allExprOfMutPatients
+  exprData[["All.Wt"]] <- allExprOfWtPatients
+  
+  pvalues[["All"]] <- t.test(allExprOfMutPatients, allExprOfWtPatients)$p.value
+  foldchanges[["All"]] <- mean(allExprOfMutPatients, na.rm = TRUE) - mean(allExprOfWtPatients, na.rm = TRUE)
+  
+  
+  # Calculate foldchanges and pvalues for metilation levels
+  for (metil_level in c("low", "med", "high")) {
+    # Get the expression data for the mutation and wild type groups
+    
+    exprOfMutPatients <- NULL
+    exprOfWtPatients <- NULL
+    
+    exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), GenSD] + 1)
+    exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), GenSD] + 1)
+    
+    # Estas líneas inicializan exprData con listas vacías para cada combinación de Mut/Wt y metil_level. Esto asegura que habrá un lugar reservado en la gráfica del boxplot para cada grupo, incluso si no hay datos para ese grupo.
+    exprData[[paste0("Mut.", metil_level)]] <- numeric(0)
+    exprData[[paste0("Wt.", metil_level)]] <- numeric(0)
+    
+    if ((length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2)) {
+      next  # Pasar a la siguiente iteración del bucle si la condición no se cumple
+    }    
+    
+    # If there are data, calculate the fold change and the p value
+    average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+    average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+    foldchange <- (average_1-average_2)
+    pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+    
+    exprData[[paste0("Mut.", metil_level)]] <- exprOfMutPatients
+    exprData[[paste0("Wt.", metil_level)]] <- exprOfWtPatients
+    
+    
+    # Añadir el p-valor y el FC a sus respectivas listas
+    pvalues[[paste0(metil_level)]] <- pvalue
+    foldchanges[[paste0(metil_level)]] <- foldchange
+    
+  }    
+  
+  ###################################################################################
+  ######################################## BOXPLOT ##################################
+  
+    # Definir los colores en tonos pastel y azul claro
+    pastel_colors <- list(
+      "All" = rgb(0.8, 0.8, 1),   # Azul
+      "low" = rgb(0.8, 1, 0),   
+      "med" = rgb(0.4, 0.8, 0),  
+      "high" = rgb(0.2, 0.5, 0)  
+    )
+    
+  # Crear un vector para los colores
+    colors <- rep(unlist(pastel_colors), each=2)
+
+  
+    # Genera el boxplot sin nombres de grupo
+    
+    y_max <- max(unlist(exprData), na.rm = TRUE)*1.15
+    
+    boxplot(exprData,
+        ylim=c(0,y_max), # Borde superior caja que contiene boxplot
+        main = paste(GenMut,"-", GenSD),
+        #ylab = "Expresión (log2)",
+        #xlab = "Grupos de pacientes", ylab = "Nivel de expresión",
+        xaxt = 'n',  # Evita que se dibujen los nombres de grupo
+        cex.main = 0.7,
+        las = 2,
+        col = colors)  # Aquí especificamos el color para cada boxplot
+    
+    # Generar las etiquetas
+    num_patients <- sapply(exprData, function(x) sum(!is.na(x)))
+    x_labels <- rep(c("Mut", "Wt"), times = length(num_patients) / 2)
+    x_labels <- paste(x_labels, "\n", num_patients, sep="")
+    
+
+    # agrega los nombres de grupo, permite controlar el tamaño con 'cex'
+    mtext(side = 1, text = x_labels, at = 1:length(exprData), las = 1, cex = 0.5, line = 0.6)
+    mtext("Expresion (log2)", side = 2, line = 2, las = 0, cex = 0.5)
+
+    for (level in c("low", "med", "high")) {
+      #if (paste0("Mut.", level) %in% names(exprData)) {
+        # Define el espacio del boxplot (en base a las columnas que coinciden)
+        boxplot_space <- which(names(exprData) == paste0("Mut.", level)):which(names(exprData) == paste0("Wt.", level))
+            
+        # Define la posición y para los textos de p-valores y FC
+        y_pos <- y_max * 0.97  # los coloca 5% por debajo del límite superior del eje y
+        
+      # Verifica si pvalues y foldchanges son numéricos y no vacíos (xa q no de error en los huecos sin boxplot)
+      if (is.numeric(pvalues[[level]]) && length(pvalues[[level]]) > 0 && is.numeric(foldchanges[[level]]) && length(foldchanges[[level]]) > 0) {
+      # Agrega el p-valor y el FC
+      text(x = mean(boxplot_space), y = y_pos, labels = paste("pval=", round(pvalues[[level]], digits = 3), "\nFC=", round(foldchanges[[level]], digits = 3)), cex = 0.5)
+      }
+      
+      # Agrega el p-valor y el FC para "All"
+      text(x = mean(1:2), y = y_pos, labels = paste("pval=", round(pvalues[["All"]], digits = 3), "\nFC=", round(foldchanges[["All"]], digits = 3)), cex = 0.5)
+    }
+    
+
+}
+
+dev.off()
+```
+
+
+
+#--------**Analyzing results (Mut metilation levels)**
+
+
+###**Genes in PAM50**
+
+Descargamos lista PAM50
+```{r}
+pam50_centroids <- read.delim("/home/gpfs/o_fernandf/fran_fernandez/PAM50/R/pam50_centroids.txt")
+pam50_genes <- pam50_centroids[, 1]
+pam50_genes[pam50_genes == "KNTC2"] <- "NDC80"
+pam50_genes[pam50_genes == "CDCA1"] <- "NUF2"
+
+pam50_genes
+```
+
+
+
+
+###**Sorted genes**
+
+
+
+```{r}
+# Extraer el segundo término de cada elemento de la lista
+listaGenesSD <- sapply(filas_seleccionadas, function(x) strsplit(x, "_")[[1]][2])
+listaGenesMut <- sapply(filas_seleccionadas, function(x) strsplit(x, "_")[[1]][1])
+
+
+sort(table(listaGenesSD), decreasing = TRUE)
+
+sort(table(listaGenesMut), decreasing = TRUE)
+
+# print("GenSD")
+# sort(unique(listaGenesSD), decreasing = TRUE)
+# print("GenMut")
+# sort(unique(listaGenesMut), decreasing = TRUE)
+```
+
+
+
+####**Mutated Genes**
+```{r}
+# Obtener los términos y contar su frecuencia
+frec_Genesmut_metilMUT <- table(sapply(strsplit(rownames(PvalFCmut_5pat0.2_filter75_005_02), "_"), `[`, 1))
+
+# Ordenar la tabla de frecuencia de manera decreciente
+frec_Genesmut_metilMUT_Ord <- sort(frec_Genesmut_metilMUT, decreasing = TRUE)
+length(frec_Genesmut_metilMUT_Ord)
+frec_Genesmut_metilMUT_Ord
+```
+   TP53    CDH1   GATA3   USH2A    FAT3     TTN    AKT1    RYR2 
+    105      53      46      15      13      11       9       9 
+  SPTA1    TCHH   CSMD3   MUC17  SCN10A   CMYA5   XIRP2   BRCA1 
+      9       9       8       6       6       4       4       3 
+   RELN  AHCTF1  ARID1A CACNA1E  DNAH10   HMCN1   MAP1A    MDN1 
+      3       2       2       2       2       2       2       2 
+ PIWIL1   ZFHX4    ANK2   ASH1L    FAT1    FLG2    FMN2   OBSCN 
+      2       2       1       1       1       1       1       1 
+  PREX2     RP1  VPS13B 
+      1       1       1
+
+
+#####**Barplot**
+
+
+```{r}
+# Ajustar los márgenes del gráfico
+#par(mar = c(5, 5, 5, 2), mgp = c(3, 0.5, 0))
+
+# Crear el gráfico de barras con los primeros 50 elementos ordenados de forma decreciente
+barplot(frec_Genesmut_metilMUT_Ord[1:50], 
+        col = "dodgerblue", 
+        main = "Frequency of first 50 MUTg in selected gene combinations\n with patient groups organized by methylation of MUTg.", 
+        xlab = "",  # Dejamos vacío el xlab aquí para agregarlo después
+        las = 2, 
+        cex.names = 0.6)
+
+# Agregar la etiqueta del eje x en una posición personalizada
+title(xlab = "MUTg", line = 3.5, adj = 0.3)  # Ajusta 'adj' para mover hacia la izquierda
+
+# Agregar la etiqueta del eje y en una posición personalizada
+mtext("Frequency (Cases)", side = 2, line = 2.5, las = 0, adj = 0.5)
+
+
+
+```
+
+
+
+
+
+Ordenar la lista alfabéticamente
+```{r}
+frec_Genesmut_Ord[order(names(frec_Genesmut_Ord))]
+```
+
+
+
+--- Description 10 first Mutated genes:
+
+1. **TP53:** It is a *tumor suppressor* gene that plays a crucial role in cell cycle regulation and DNA repair. Mutations in TP53 are associated with various types of cancer.
+2. **PIK3CA:** It encodes a kinase protein that is involved in cell signaling and is implicated in *cell growth and proliferation*. Mutations in this gene are found in several types of cancer.
+3. **GATA3:** This gene encodes a transcription factor that plays an important role in *tissue and organ development, including the mammary gland and the immune system*.
+4. **CDH1:** It encodes a protein that acts as a *tumor suppressor* by maintaining cell integrity and cell adhesion. Mutations in this gene are associated with gastric and breast cancer.
+5. **MAP3K1:** This gene is involved in the MAPK cell signaling pathway and plays a role in regulating the *cellular stress response and cell proliferation*.
+6. **TTN:** It encodes the titin protein, which is essential for muscle contraction and provides stability to muscle fibers.
+7. **KMT2C:** This gene is related to gene expression regulation and may function as a *tumor suppressor* in certain contexts.
+8. **MAP2K4:** It encodes a kinase protein that is part of the transforming growth factor-beta (TGF-beta) signaling pathway and plays a role in *cell cycle regulation and apoptosis*.
+9. **FAT3:** This gene encodes a protein that is important in development and *cell adhesion*.
+10. **AKT1:** It is a gene that encodes a kinase protein involved in *multiple cell signaling pathways*, including cell survival and growth. Mutations in this gene may be related to certain types of cancer.
+
+---
+
+
+
+---------------------- Relacionados con cáncer:
+Todos estan relacionados con el cáncer, destacan: TP53, CDH1, GATA3, AKT1, BRCA1, ARID1A, FAT1, ZFHX4
+
+
+--- genes in pam50 list:
+```{r}
+intersect(names(frec_Genesmut_metilMUT_Ord), pam50_genes)
+```
+No Genes in PAM50 list
+
+
+names(frec_Genesmut_metilMUT_Ord)
+
+####**Transcribed Genes**
+```{r}
+# Obtener los términos y contar su frecuencia
+frec_GenesTrans_metilMUT <- table(sapply(strsplit(rownames(PvalFCmut_5pat0.2_filter75_005_02), "_"), `[`, 2))
+
+# Ordenar la tabla de frecuencia de manera decreciente
+frec_GenesTrans_metilMUT_Ord <- sort(frec_GenesTrans_metilMUT, decreasing = TRUE)
+length(frec_GenesTrans_metilMUT_Ord)
+frec_GenesTrans_metilMUT_Ord[1:50]
+```
+
+14 primeros
+ HRASLS5    AGTR1     IDO1    KCNE4    PDZK1    PTPRT   TMEM26 
+       5        4        4        4        4        4        4 
+C1orf106    CLIC6     CPA4    GRIK3     GZMB      HDC    KCNK3 
+       3        3        3        3        3        3        3 
+
+
+
+
+#####**Barplot**
+
+
+```{r}
+barplot(frec_GenesTrans_metilMUT_Ord[1:50], 
+        col = "dodgerblue", 
+        main = "Frequency of first 50 SDg in selected gene combinations with\npatient groups organized by methylation of MUTg.",
+        xlab = mtext("SDg", side = 1, line = 3.5), 
+        #ylab = "Frequency", 
+        las = 2, 
+        cex.names = 0.6)
+
+# Agregar la etiqueta del eje y en una posición personalizada
+mtext("Frequency (Cases)", side = 2, line = 2.5, las = 0, adj = 0.5)
+```
+
+
+AGR2 (Anterior Gradient 2): Associated with cell proliferation and metastasis in several cancer types, such as breast and prostate cancer.
+
+BCAS1 (Breast Carcinoma Amplified Sequence 1): Linked to breast cancer and may be amplified in breast tumors.
+
+CA12 (Carbonic Anhydrase 12): Found in gastrointestinal tract cells and has been associated with colorectal cancer.
+
+
+
+--- Description 10 first Transcribed genes:             
+1. **KCNE4**: KCNE4 encodes a protein involved in ion channel regulation, influencing *cell signaling pathways*. It may be associated with cardiac repolarization.
+2. **PGR**: PGR, or progesterone receptor, is crucial in reproductive processes, playing a central role in pregnancy and menstrual cycle regulation. It also affects *breast tissue development*.
+3. **PLCH1**: PLCH1 contributes to *cell signaling and movement*, potentially impacting cellular behaviors. It is involved in various cellular processes, including calcium signaling.
+4. **HRASLS5**: HRASLS5 is associated with lipid metabolism, affecting *cellular lipid expression* and potentially influencing cell functions. It may play a role in lipid homeostasis.
+5. **IDO1**: IDO1 modulates immune responses, contributing to immune tolerance and controlling inflammation. It plays a role in *immune regulation and tumor immune escape*.
+6. **AQP9**: AQP9 encodes an aquaporin, facilitating the transport of water and solutes across cell membranes. It is involved in water and glycerol transport in various tissues.
+7. **GATA3**: GATA3 is a critical transcription factor in tissue development, playing key roles in immune and mammary tissue formation. It is essential for immune cell differentiation and *breast development*.
+8. **ABCA8**: ABCA8 is part of a transporter protein family involved in lipid metabolism and transport. It may contribute to lipid transport within cells.
+9. **BCL11A**: BCL11A functions as a transcription factor, influencing *cellular development processes*. It plays a role in hematopoiesis and tissue development.
+10. **CHAD**: CHAD is associated with extracellular matrix components and may impact tissue structure and function. It plays a role in *cell-matrix interactions and tissue integrity*.
+
+---
+
+
+
+--- Transcribed genes in pam50 list:
+
+```{r}
+intersect(names(frec_GenesTrans_metilMUT_Ord), pam50_genes)
+```
+[1] "FGFR4"   "MAPT"    "PGR"     "CDH3"    "EGFR"    "KRT5"   
+[7] "SFRP1"   "TMEM45B"
+
+
+--- Description of transcribed genes in pam50 list:
+
+1. **FGFR4 (Fibroblast Growth Factor Receptor 4)**: This gene encodes a receptor for fibroblast growth factor, playing a role in tissue growth and development. Mutations in FGFR4 can be related to various diseases and conditions, including cancer.
+2. **MAPT (Microtubule-Associated Protein Tau)**: MAPT encodes a protein that stabilizes and regulates microtubules in cells. Mutations in this gene may be associated with neurodegenerative diseases, such as Alzheimer's disease and tauopathies.
+3. **PGR (Progesterone Receptor)**: This gene encodes the progesterone receptor, a hormone that plays a significant role in regulating the menstrual cycle and pregnancy. It is also involved in the development and functioning of breast tissues.
+4. **CDH3 (Cadherin 3)**: CDH3 encodes a cell adhesion protein called cadherin 3. These proteins play an essential role in cell adhesion in tissues and organs.
+5. **EGFR (Epidermal Growth Factor Receptor)**: EGFR is a pivotal gene involved in cell growth and differentiation. It codes for a receptor protein that, when activated, triggers signaling pathways regulating cell proliferation. EGFR is implicated in cancer and is a target for cancer therapies.
+6. **KRT5 (Keratin 5)**: KRT5 encodes a protein called keratin 5, which is essential for the structural integrity of the epidermis and other epithelial tissues.
+7. **SFRP1 (Secreted Frizzled-Related Protein 1)**: SFRP1 encodes a secreted protein involved in the regulation of the Wnt signaling pathway. This pathway is critical in cellular development and growth, and its dysfunction is related to cancer and other diseases.
+8. **TMEM45B (Transmembrane Protein 45B)**: TMEM45B encodes a transmembrane protein, although its specific function is not fully characterized.
+
+
+
+---- Relacionados con cáncer: 
+
+TP53, CDH1, GATA3, USH2A, FAT3, TTN, AKT1, RYR2, BRCA1
+
+ 
+ 
+
+
+#-----------------------------------------------------------------------
+#--------------- genSD metil groups
+#-----------------------------------------------------------------------
+
+
+#-------- **FILTERING MATRIX GenSD**
+
+###**Selec 2 mutGroups>=5 patients**
+
+
+PvalFCmut_NoNA 
+```{r}
+# MatrixList_total_notNA$"2Groups5pat" <- apply(MatrixList_total_notNA[, c("mut_low", "mut_med", "mut_high")], 1, function(x) sum(x >= 5) >= 2)
+
+
+PvalFCmut_5patg2 <- PvalFCmut_NoNA[rowSums(PvalFCmut_NoNA[, c("mut_low", "mut_med", "mut_high")] >= 5) >= 2, ]
+
+# save(DF_PvalFCmut_NoNA, file ="~/vlad/TFM_bioinf/RESULTS/PvalFCmut_5pat.rda")
+# load("~/vlad/TFM_bioinf/RESULTS/DF_PvalFCmut_NoNA.rda")
+
+dim(PvalFCmut_5patg2)
+```
+[1] 1563   26
+
+
+####>*PvalFCmut_5patg2*
+
+
+###**Select <0.05 and another one >0.2**
+*Select rows at least one level <0.05 and one >0.2*
+
+
+```{r}
+cond1 <- (PvalFCmut_5patg2[, "pval_low"] < 0.05 & PvalFCmut_5patg2[, "mut_low"] > 4) | (PvalFCmut_5patg2[, "pval_med"] < 0.05 & PvalFCmut_5patg2[, "mut_med"] > 4) | (PvalFCmut_5patg2[, "pval_high"] < 0.05 & PvalFCmut_5patg2[, "mut_high"] > 4)
+
+cond2 <- rowSums(PvalFCmut_5patg2[, c("pval_low", "pval_med", "pval_high")] > 0.2, na.rm = T) >= 1
+
+# Aplicar ambas condiciones para filtrar el dataframe
+PvalFCmut_5patg2_0.2 <- PvalFCmut_5patg2[cond1 & cond2, ]
+
+dim(PvalFCmut_5patg2_0.2)
+```
+####>*PvalFCmut_5patg2_0.2*
+
+
+
+
+###**pval <0.05 and FC out range**
+*Select rows at least one level <0.05 and one FC out range*
+
+ >log2(1.5) ..........0.5849625
+ <-log2(1.5).........-0.5849625
+ 
+ *El cálculo de foldchanges se hizo sobre con la estandarización log2 de la expresión génica, por lo que si queremos eliminar las expresiones del rango "+/-1,5" tenemos que aplicar el log2 a este valor para que el rango sea correcto.*
+ 
+ 
+```{r}
+# Crea una nueva matriz que contenga solo las filas que cumplen al menos una de las tres condiciones
+
+#tratar los valores NA como si no cumplieran la condición (es decir, como FALSE), puedes usar la función is.na() en combinación con la negación ! para verificar si los valores son NA y revertir el resultado. De este modo, los valores NA se tratarán como FALSE y todos los demás valores se evaluarán según las condiciones originales.
+
+PvalFCmut_5patg2_0.2_filter<- PvalFCmut_5patg2_0.2[
+  (((!is.na(PvalFCmut_5patg2_0.2[,"FC_low"]) & (PvalFCmut_5patg2_0.2[,"FC_low"] < -0.58 | PvalFCmut_5patg2_0.2[,"FC_low"] > 0.58)) & !is.na(PvalFCmut_5patg2_0.2[,"pval_low"]) & PvalFCmut_5patg2_0.2[,"pval_low"] <= 0.05) |
+  ((!is.na(PvalFCmut_5patg2_0.2[,"FC_med"]) & (PvalFCmut_5patg2_0.2[,"FC_med"] < -0.58 | PvalFCmut_5patg2_0.2[,"FC_med"] > 0.58)) & !is.na(PvalFCmut_5patg2_0.2[,"pval_med"]) & PvalFCmut_5patg2_0.2[,"pval_med"] <= 0.05) |
+  ((!is.na(PvalFCmut_5patg2_0.2[,"FC_high"]) & (PvalFCmut_5patg2_0.2[,"FC_high"] < -0.58 | PvalFCmut_5patg2_0.2[,"FC_high"] > 0.58)) & !is.na(PvalFCmut_5patg2_0.2[,"pval_high"]) & PvalFCmut_5patg2_0.2[,"pval_high"] <= 0.05)),
+]
+
+dim(PvalFCmut_5patg2_0.2_filter)
+```
+[1] 656  26
+
+
+
+####>*PvalFCmut_5patg2_0.2_filter*
+
+View(PvalFCmut_5pat0.2_filter)
+
+
+
+#--------**Final Filters*
+
+
+#**Select 75% FC variation and pval<0.05 + pval<0.05+ pval>0.2**
+
+
+```{r}
+# FC >75% FC total + pval<0.05
+condition_low <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_low"]) >= 0.75 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_low"] < 0.05
+
+condition_med <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_med"]) >= 0.75 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_med"] < 0.05
+
+condition_high <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_high"]) >= 0.75 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_high"] < 0.05
+
+condition1 <- condition_low | condition_med | condition_high
+
+# FC<50% + pval>0.2
+condition2_low <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_low"]) <= 0.5 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_low"] > 0.2
+
+condition2_med <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_med"]) <= 0.5 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_med"] > 0.2
+
+condition2_high <- abs(PvalFCmut_5patg2_0.2_filter[, "FC_high"]) <= 0.5 * abs(PvalFCmut_5patg2_0.2_filter[, "FC_All"]) & PvalFCmut_5patg2_0.2_filter[, "pval_high"] > 0.2
+
+condition2 <- condition2_low | condition2_med | condition2_high
+
+# Crear el nuevo dataframe filtrado
+#PvalFCmut_5pat0.2_filter50_005 <- PvalFCmut_5pat0.2_filter[condition, ]...no elimina las filas, las hace NA.
+# Cuando se utiliza [condition, ] con el DataFrame original, se seleccionan las filas del DataFrame original donde condition es TRUE.
+
+PvalFCmut_5patg2_0.2_filter75_005_02 <- subset(PvalFCmut_5patg2_0.2_filter, condition1 & condition2)
+
+dim(PvalFCmut_5patg2_0.2_filter75_005_02)
+
+```
+[1] 408  26
+
+
+
+Guardamos:
+```{r}
+# Guardar la matriz en un archivo RDS
+saveRDS(PvalFCmut_5patg2_0.2_filter75_005_02, file = "~/vlad/TFM_bioinf/RESULTS/PvalFC_metilSD_5pat_0.2_filter75_005_02.rds")
+# Cargar la matriz desde el archivo RDS
+# PvalFCmut_5patg2_0.2_filter75_005_02 <- readRDS("PvalFCmut_5patg2_0.2_filter75_005_02.rds")
+```
+
+
+
+
+#--------**BOXPLOT GenesSD**
+
+
+###**Total patients + wt/mut boxplot**
+*Use name rows PvalFCmut_5pat0.2_filter in the loop* 
+
+
+####**Dataset pacientes modificado:**
+Obtenemos BOXPLOT con nuevo dataset y nueva función:
+
+mutations_filter4_patCpG ..............pacientes filtrados
+*mutations_filter4_patCpG_notABC2*
+
+*Crear los grupos mut/wt con la selección de pacientes:*
+Previamente hemos eliminado los datos de pacientes que no coinciden entre los dataset Patients_valCpG y mutations_filter2$patient. Así evitamos que en el recuento de pacientes para cada nivel de metilación aparezcan grupos en los que no existen todos los pacientes.......................
+
+También hemos eliminado las muestras repetidas (quedandonos con la última en cada caso) para los Tumor_Barcode_Sample de 16 caracteres (...A,B,C).
+
+Functions to get patients: ........En el LOOP.
+
+
+
+
+PvalFCmut_5pat0.2_filter75_005
+
+
+
+
+
+
+####**Final boxplot**
+---------------------------Modificado:        ..................................este se el RESULTADO FINAL
+
+PvalFCmut_5patg2_0.2_filter75_005_02
+
+~/vlad/TFM_bioinf/IMG/PvalFCgenSD_CpG_notABC3_75_005_02g2.pdf
+```{r}
+pdf("~/vlad/TFM_bioinf/IMG/PvalFCgenSD_CpG_notABC3_75_005_02g2.pdf", width=6, height=10)
+
+# Crear una figura con varios paneles
+par(mfrow = c(4,3), mar = c(3,2,2,1), oma = c(1,1,1,1))
+
+
+for (row_name in rownames(PvalFCmut_5patg2_0.2_filter75_005_02)) {
+  
+  #El uso de [[1]] se debe a que strsplit() devuelve una lista de vectores de caracteres. Al utilizar [[1]], accedemos al primer elemento de la lista, que es el vector de caracteres con las partes separadas. A partir de ahí, podemos extraer el primer nombre utilizando split_name[1] y el segundo nombre utilizando split_name[2].
+  
+  # Extract names from rownames
+  split_name <- strsplit(row_name, "_")[[1]]
+  GenMut <- split_name[1]
+  GenSD <- split_name[2]
+
+  
+  
+  
+  # # Seleccionar los pacientes mutados y no mutados para el gen g en la matriz de expresión original
+  # mutpatients <- getMutatedPatients(GenMut, mutations_filter2)
+  # wtpatients <- getWildtypePatients(GenMut, mutations_filter2)
+  
+  # Cambiamos dataset mutations_filter2 a mutations_filter3_patCpG:
+  mutpatients <- getMutatedPatients(GenMut, mutations_filter4_patCpG_notABC3)
+  wtpatients <- getWildtypePatients(GenMut, mutations_filter4_patCpG_notABC3)
+  
+
+  # Patients (3 first elements) and metilation
+  # metil_MutPatients <- mediasCpG_genes[sapply(strsplit(rownames(mediasCpG_genes), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% mutpatients, GenSD]
+  # metil_WtPatients <- mediasCpG_genes[sapply(strsplit(rownames(mediasCpG_genes), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% wtpatients, GenSD]
+  metil_MutPatients <- mediasCpG_genes[substr(rownames(mediasCpG_genes), 1, 16) %in% substr(mutpatients, 1, 16), GenSD]
+  metil_WtPatients <- mediasCpG_genes[substr(rownames(mediasCpG_genes), 1, 16) %in% substr(wtpatients, 1, 16), GenSD]
+
+  # Eliminamos Na
+  metil_MutPatients <- metil_MutPatients[complete.cases(metil_MutPatients)]
+  metil_WtPatients <- metil_WtPatients[complete.cases(metil_WtPatients)]
+  
+  # Clasificación de metilación (PATIENTS GROUPS BY METILATION LEVEL)
+  metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+  metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+  
+  metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+  metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+  
+  metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+  metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+  
+  exprData <- list() # lista para guardar la expr wt/mut x nivel
+  pvalues <- list()  # lista para guardar los p-valores
+  foldchanges <- list()  # lista para guardar los FC
+  
+  
+  # Selección de todos los pacientes mutados y no mutados
+  
+  allExprOfMutPatients <- NULL
+  allExprOfWtPatients <- NULL
+  
+  # # Obtenemos listado nombres pacientes totales wt/mut con datos de metilación:
+  # nombres_cortos <- substr(names(metil_MutPatients), 1, 16)
+  # nombres_cortos <- substr(names(metil_WtPatients), 1, 16)
+  
+  # Obtenemos expresiones:
+  allExprOfMutPatients <- log2(expr_filter90[substr(names(metil_MutPatients), 1, 16), GenSD] + 1)
+  allExprOfWtPatients <- log2(expr_filter90[substr(names(metil_WtPatients), 1, 16), GenSD] + 1)
+
+  exprData[["All.Mut"]] <- allExprOfMutPatients
+  exprData[["All.Wt"]] <- allExprOfWtPatients
+  
+  pvalues[["All"]] <- t.test(allExprOfMutPatients, allExprOfWtPatients)$p.value
+  foldchanges[["All"]] <- mean(allExprOfMutPatients, na.rm = TRUE) - mean(allExprOfWtPatients, na.rm = TRUE)
+  
+  
+  # Calculate foldchanges and pvalues for metilation levels
+  for (metil_level in c("low", "med", "high")) {
+    # Get the expression data for the mutation and wild type groups
+    
+    exprOfMutPatients <- NULL
+    exprOfWtPatients <- NULL
+    
+    exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), GenSD] + 1)
+    exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), GenSD] + 1)
+    
+    # Estas líneas inicializan exprData con listas vacías para cada combinación de Mut/Wt y metil_level. Esto asegura que habrá un lugar reservado en la gráfica del boxplot para cada grupo, incluso si no hay datos para ese grupo.
+    exprData[[paste0("Mut.", metil_level)]] <- numeric(0)
+    exprData[[paste0("Wt.", metil_level)]] <- numeric(0)
+    
+    if ((length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2)) {
+      next  # Pasar a la siguiente iteración del bucle si la condición no se cumple
+    }    
+    
+    # If there are data, calculate the fold change and the p value
+    average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+    average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+    foldchange <- (average_1-average_2)
+    pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+    
+    exprData[[paste0("Mut.", metil_level)]] <- exprOfMutPatients
+    exprData[[paste0("Wt.", metil_level)]] <- exprOfWtPatients
+    
+    
+    # Añadir el p-valor y el FC a sus respectivas listas
+    pvalues[[paste0(metil_level)]] <- pvalue
+    foldchanges[[paste0(metil_level)]] <- foldchange
+    
+  }    
+  
+  ###################################################################################
+  ######################################## BOXPLOT ##################################
+  
+    # Definir los colores en tonos pastel y azul claro
+    pastel_colors <- list(
+      "All" = rgb(0.8, 0.8, 1),   # Azul 
+      "low" = rgb(1, 1, 0.6),  # Amarillo 
+      "med" = rgb(1, 0.8, 0.6),  # Naranja 
+      "high" = rgb(1, 0.6, 0.6)  # Rojo 
+    )
+    
+  # Crear un vector para los colores
+    colors <- rep(unlist(pastel_colors), each=2)
+
+  
+    # x_labels <- c()
+    # for (name in names(exprData)) {
+    #   if (grepl("Mut", name)) {
+    #     x_labels <- c(x_labels, "Mut")
+    #   } else if (grepl("Wt", name)) {
+    #     x_labels <- c(x_labels, "Wt")
+    #   }
+    # }
+    
+    
+    
+    # Genera el boxplot sin nombres de grupo
+    
+    y_max <- max(unlist(exprData), na.rm = TRUE)*1.15
+    
+    boxplot(exprData,
+        ylim=c(0,y_max), # Borde superior caja que contiene boxplot
+        main = paste(GenMut,"-", GenSD),
+        #ylab = "Expresión (log2)",
+        #xlab = "Grupos de pacientes", ylab = "Nivel de expresión",
+        xaxt = 'n',  # Evita que se dibujen los nombres de grupo
+        cex.main = 0.7,
+        las = 2,
+        col = colors)  # Aquí especificamos el color para cada boxplot
+    
+    # Generar las etiquetas
+    num_patients <- sapply(exprData, function(x) sum(!is.na(x)))
+    x_labels <- rep(c("Mut", "Wt"), times = length(num_patients) / 2)
+    x_labels <- paste(x_labels, "\n", num_patients, sep="")
+    
+
+    # agrega los nombres de grupo, permite controlar el tamaño con 'cex'
+    mtext(side = 1, text = x_labels, at = 1:length(exprData), las = 1, cex = 0.5, line = 0.6)
+    mtext("Expresion (log2)", side = 2, line = 2, las = 0, cex = 0.5)
+
+    for (level in c("low", "med", "high")) {
+      #if (paste0("Mut.", level) %in% names(exprData)) {
+        # Define el espacio del boxplot (en base a las columnas que coinciden)
+        boxplot_space <- which(names(exprData) == paste0("Mut.", level)):which(names(exprData) == paste0("Wt.", level))
+            
+        # Define la posición y para los textos de p-valores y FC
+        y_pos <- y_max * 0.97  # los coloca 5% por debajo del límite superior del eje y
+        
+      # Verifica si pvalues y foldchanges son numéricos y no vacíos (xa q no de error en los huecos sin boxplot)
+      if (is.numeric(pvalues[[level]]) && length(pvalues[[level]]) > 0 && is.numeric(foldchanges[[level]]) && length(foldchanges[[level]]) > 0) {
+      # Agrega el p-valor y el FC
+      text(x = mean(boxplot_space), y = y_pos, labels = paste("pval=", round(pvalues[[level]], digits = 3), "\nFC=", round(foldchanges[[level]], digits = 3)), cex = 0.5)
+      }
+      
+      # Agrega el p-valor y el FC para "All"
+      text(x = mean(1:2), y = y_pos, labels = paste("pval=", round(pvalues[["All"]], digits = 3), "\nFC=", round(foldchanges[["All"]], digits = 3)), cex = 0.5)
+    }
+    
+
+}
+
+dev.off()
+```
+
+
+
+#--------**Analyzing results (SD metilation levels)**
+
+###**Genes in PAM50**
+
+Descargamos lista PAM50
+```{r}
+pam50_centroids <- read.delim("/home/gpfs/o_fernandf/fran_fernandez/PAM50/R/pam50_centroids.txt")
+pam50_genes <- pam50_centroids[, 1]
+pam50_genes[pam50_genes == "KNTC2"] <- "NDC80"
+pam50_genes[pam50_genes == "CDCA1"] <- "NUF2"
+
+pam50_genes
+```
+
+
+
+###**Sorted genes**
+
+
+####>Mutated Genes
+*Metilgroups by g2* Metil by SD genes
+```{r}
+# Obtener los términos y contar su frecuencia
+frec_Genesmut <- table(sapply(strsplit(rownames(PvalFCmut_5patg2_0.2_filter75_005_02), "_"), `[`, 1))
+
+# Ordenar la tabla de frecuencia de manera decreciente
+frec_Genesmut_Ord <- sort(frec_Genesmut, decreasing = TRUE)
+length(frec_Genesmut_Ord)
+frec_Genesmut_Ord
+```
+
+[1] 79
+
+    TP53   PIK3CA    GATA3     CDH1   MAP3K1   MAP2K4    KMT2C      TTN     AKT1    USH2A     FAT3     RYR2    SPTA1 
+      92       55       47       29       24       14       11        9        8        6        5        5        5 
+    LRP2    HMCN1   PIK3R1     RELN    ZFHX4     APOB     CBFB    CMYA5      DMD    DNAH8      DST  DYNC2H1    FOXA1 
+       4        3        3        3        3        2        2        2        2        2        2        2        2 
+   HUWE1 KIAA1109    KMT2D     LYST    MUC17     MYH9   PAPPA2     PCLO    PTPRD    RUNX1    SYNE2     TBX3   VPS13B 
+       2        2        2        2        2        2        2        2        2        2        2        2        2 
+  ABCA13   AHCTF1    AHNAK     ANK2   ARID1A     ASPM    ASXL3    BAZ2B    BIRC6    BRCA1   CEP350     CHD4  COL12A1 
+       1        1        1        1        1        1        1        1        1        1        1        1        1 
+   CSMD1    CSMD3     CUBN    DNAH5    DNAH9   DOCK11    FCGBP    GON4L    HERC1     MDN1    MUC5B    MXRA5   MYO18B 
+       1        1        1        1        1        1        1        1        1        1        1        1        1 
+     NF1    OBSCN   PIWIL1  PKHD1L1     PTEN     RYR3     SPEN    SRCAP    SYNE1     TCHH    TENM1     UTRN    XIRP2 
+       1        1        1        1        1        1        1        1        1        1        1        1        1 
+   ZDBF2 
+       1 
+
+
+
+Cambiamos etiqueta eje y:
+```{r}
+# par(mgp = c(3, 0.5, 0))
+# Crear el gráfico de barras
+barplot(frec_Genesmut_Ord[1:50], 
+        col = "dodgerblue", 
+        main = "Frequency of first 50 Mut genes in selected gene combinations with\npatient groups organized by methylation of SD genes.",
+        xlab = mtext("Mut genes", side = 1, line = 3.5), 
+        #ylab = "Frequency", 
+        las = 2, 
+        cex.names = 0.6)
+
+# Agregar la etiqueta del eje y en una posición personalizada
+mtext("Frequency (Cases)", side = 2, line = 2.5, las = 0, adj = 0.5)
+
+
+```
+
+
+
+
+Ordenar la lista alfabéticamente
+```{}
+frec_Genesmut_Ord[order(names(frec_Genesmut_Ord))]
+```
+
+--- Description 10 first Mutated genes:
+
+1. **TP53:** It is a *tumor suppressor* gene that plays a crucial role in cell cycle regulation and DNA repair. Mutations in TP53 are associated with various types of cancer.
+
+2. **PIK3CA:** It encodes a kinase protein that is involved in cell signaling and is implicated in *cell growth and proliferation*. Mutations in this gene are found in several types of cancer.
+
+3. **GATA3:** This gene encodes a transcription factor that plays an important role in *tissue and organ development, including the mammary gland and the immune system*.
+
+4. **CDH1:** It encodes a protein that acts as a *tumor suppressor* by maintaining cell integrity and cell adhesion. Mutations in this gene are associated with gastric and breast cancer.
+
+5. **MAP3K1:** This gene is involved in the MAPK cell signaling pathway and plays a role in regulating the *cellular stress response and cell proliferation*.
+
+6. **TTN:** It encodes the titin protein, which is essential for muscle contraction and provides stability to muscle fibers.
+
+7. **KMT2C:** This gene is related to gene expression regulation and may function as a *tumor suppressor* in certain contexts.
+
+8. **MAP2K4:** It encodes a kinase protein that is part of the transforming growth factor-beta (TGF-beta) signaling pathway and plays a role in *cell cycle regulation and apoptosis*.
+
+9. **FAT3:** This gene encodes a protein that is important in development and *cell adhesion*.
+
+10. **AKT1:** It is a gene that encodes a kinase protein involved in *multiple cell signaling pathways*, including cell survival and growth. Mutations in this gene may be related to certain types of cancer.
+
+---
+
+
+
+--- Genes relacionados con el cáncer:
+
+TP53, PIK3CA, GATA3, CDH1, MAP3K1, MAP2K4, KMT2C, AKT1, PIK3R1, CBFB, FOXA1, HUWE1, RUNX1, ARID1A, BRCA1, NF1, PTEN.
+
+---
+
+
+
+--- Genes in pam50 list:
+
+```{r}
+intersect(names(frec_Genesmut_Ord), pam50_genes)
+```
+--- Description of mutated genes in pam50 list:
+
+**FOXA1:** FOXA1 is a pivotal transcription factor in breast cancer, involved in regulating hormone receptor-positive tumors, impacting disease progression and treatment strategies.
+
+---
+
+
+####>Transcribed Genes
+*Metilgroups by g2*
+```{r}
+# Obtener los términos y contar su frecuencia
+frec_GenesTrans <- table(sapply(strsplit(rownames(PvalFCmut_5patg2_0.2_filter75_005_02), "_"), `[`, 2))
+
+# Ordenar la tabla de frecuencia de manera decreciente
+frec_GenesTrans_Ord <- sort(frec_GenesTrans, decreasing = TRUE)
+length(frec_GenesTrans_Ord)
+frec_GenesTrans_Ord [1:26]
+```
+
+KCNE4      PGR    GATA3    PLCH1   BCL11A     CHAD  HRASLS5    PDZK1     TFF3    PSAT1    ACOX2     AGR2    CAPN8      EN1 
+      10        9        7        7        6        6        6        6        6        5        4        4        4        4 
+   GSDMC    KIF12      LTF   PCDHA6    SOX11     AQP9 C10orf81    CORO6    GRB14    GRIK3      HPX    HSPB8 
+       4        4        4        4        4        3        3        3        3        3        3        3 
+
+
+
+
+```{r}
+# par(mgp = c(3, 0.5, 0))
+# Crear el gráfico de barras
+barplot(frec_GenesTrans_Ord[1:50], 
+        col = "dodgerblue", 
+        main = "Frequency of first 50 SD genes in selected gene combinations with\npatient groups organized by methylation of SD genes.",
+        xlab = mtext("SD genes", side = 1, line = 3.5), 
+        #ylab = "Frequency", 
+        las = 2, 
+        cex.names = 0.6)
+
+# Agregar la etiqueta del eje y en una posición personalizada
+mtext("Frequency", side = 2, line = 2.5, las = 0, adj = 0.5)
+```
+
+
+
+
+
+--- Description 10 first Transcribed genes:             
+1. **KCNE4**: KCNE4 encodes a protein involved in ion channel regulation, influencing *cell signaling pathways*. It may be associated with cardiac repolarization.
+
+2. **PGR**: PGR, or progesterone receptor, is crucial in reproductive processes, playing a central role in pregnancy and menstrual cycle regulation. It also affects *breast tissue development*.
+(Receptor de progesterona): Está presente en la lista PAM50 y se asocia con los subtipos luminales del cáncer de mama.
+
+3. **PLCH1**: PLCH1 contributes to *cell signaling and movement*, potentially impacting cellular behaviors. It is involved in various cellular processes, including calcium signaling.
+
+4. **HRASLS5**: HRASLS5 is associated with lipid metabolism, affecting *cellular lipid expression* and potentially influencing cell functions. It may play a role in lipid homeostasis.
+
+5. **IDO1**: IDO1 modulates immune responses, contributing to immune tolerance and controlling inflammation. It plays a role in *immune regulation and tumor immune escape*.
+
+6. **AQP9**: AQP9 encodes an aquaporin, facilitating the transport of water and solutes across cell membranes. It is involved in water and glycerol transport in various tissues.
+
+7. **GATA3**: GATA3 is a critical transcription factor in tissue development, playing key roles in immune and mammary tissue formation. It is essential for immune cell differentiation and *breast development*.
+
+8. **ABCA8**: ABCA8 is part of a transporter protein family involved in lipid metabolism and transport. It may contribute to lipid transport within cells.
+
+9. **BCL11A**: BCL11A functions as a transcription factor, influencing *cellular development processes*. It plays a role in hematopoiesis and tissue development.
+
+10. **CHAD**: CHAD is associated with extracellular matrix components and may impact tissue structure and function. It plays a role in *cell-matrix interactions and tissue integrity*.
+
+---
+
+
+
+
+---------------------------Relacionados con cáncer:
+
+AGR2 (Anterior Gradient 2): Associated with cell proliferation and metastasis in several cancer types, such as breast and prostate cancer.
+
+BCAS1 (Breast Carcinoma Amplified Sequence 1): Linked to breast cancer and may be amplified in breast tumors.
+
+CA12 (Carbonic Anhydrase 12): Found in gastrointestinal tract cells and has been associated with colorectal cancer.
+
+
+
+```{r}
+intersect(names(frec_GenesTrans_Ord), pam50_genes)
+```
+"PGR"   "EGFR"  "FGFR4" "MLPH"  "NAT1"  "ESR1"  "KRT14"
+
+
+--- Description Transcribed genes in pam50 list:
+1. **PGR (Progesterone Receptor):** PGR is a key regulator of female reproductive processes. It plays a central role in mediating the effects of the hormone progesterone, influencing aspects such as pregnancy, menstrual cycle, and **breast development**.
+
+2. **EGFR (Epidermal Growth Factor Receptor):** EGFR is a pivotal gene involved in cell growth and differentiation. It codes for a receptor protein that, when activated, triggers signaling pathways regulating cell proliferation. EGFR is implicated in **cancer** and is a target for cancer therapies.
+(Receptor del factor de crecimiento epidérmico): Está presente en la lista PAM50. Este gen codifica el receptor del factor de crecimiento epidérmico y está asociado con el subtipo HER2-enriquecido del cáncer de mama.
+
+
+3. **FGFR4 (Fibroblast Growth Factor Receptor 4):** FGFR4 is a member of the FGFR family and is associated with cell growth and tissue repair. It is involved in processes like wound healing and has been linked to certain **cancers** and metabolic disorders.
+Este gen codifica el receptor 4 del factor de crecimiento de fibroblastos y desempeña un papel en la señalización celular y el crecimiento celular.
+
+4. **NAT1 (N-Acetyltransferase 1):** NAT1 encodes an enzyme responsible for metabolizing various compounds, including drugs and environmental toxins. Genetic variations in NAT1 can influence an individual's susceptibility to drug toxicity and **cancer risk**.
+
+5. **ESR1 (Estrogen Receptor 1):** ESR1 codes for the estrogen receptor, a critical component in mediating the effects of the hormone estrogen. It plays a fundamental role in female reproductive health, influencing processes like **breast development** and menstrual cycle regulation.
+
+6. **KRT14 (Keratin 14):** KRT14 is a structural gene encoding a protein that forms part of the cytoskeleton in skin cells. It provides structural support and stability to skin tissues and is essential for the integrity of the skin's outer layer.
+
+7. **KRT5 (Keratin 5):** KRT5, like KRT14, is another keratin gene that contributes to the structure of skin, hair, and nails. Mutations in KRT5 and KRT14 can lead to skin disorders like epidermolysis bullosa.
+
+8. **MLPH (Melanophilin):** MLPH is involved in the transport of pigment-producing organelles (melanosomes) within melanocytes. It plays a role in determining skin, hair, and eye color and can influence pigmentation-related disorders.
+
+9. **SFRP1 (Secreted Frizzled-Related Protein 1):** SFRP1 is a gene that encodes a protein involved in regulating the Wnt signaling pathway. It plays a role in cell growth and differentiation, and alterations in this pathway can contribute to **cancer** and developmental disorders.
+
+---
+
+ 
+ 
+ 
+
+ 
+
+
+
+
+
+
+
+
+
+

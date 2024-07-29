@@ -1,0 +1,1062 @@
+
+
+
+```{r}
+#pvalMatrix4 = readRDS("pvalMatrix4.rds")
+pvalMatrix4 <- readRDS("~/vlad/TFM_bioinf/rds_RESULTS/pvalMatrix4.rds")
+```
+
+
+
+La corrección de Bonferroni divide el nivel de significancia global por el número de pruebas realizadas, lo que resulta en un nivel de significancia ajustado muy bajo. La corrección de BH no divide el nivel de significancia global, sino que utiliza una corrección basada en el número de pruebas realizadas y el número de descubrimientos significativos esperados.
+
+
+# **Corrección de Benjamini-Hochberg (BH)**
+
+```{r}
+# Aplicar la corrección de Benjamini-Hochberg
+n <- nrow(pvalMatrix4) * ncol(pvalMatrix4)
+vecBH_pvalMatrix4 <- p.adjust(pvalMatrix4, method = "BH", n = n)
+
+#Obtenemos un vector como resultado de la función "Benjamini-Hochberg". Tenemos que transformar ese vector en una matriz de las mismas dimensiones y con los mismos nombres de filas y columnas que la original.
+BH_pvalMatrix4 <- matrix(vecBH_pvalMatrix4, nrow = nrow(pvalMatrix4), ncol = ncol(pvalMatrix4), dimnames = list(rownames(pvalMatrix4), colnames(pvalMatrix4)))
+
+# Verificar que las dimensiones de la matriz sean iguales a las de la matriz original
+dim(BH_pvalMatrix4) == dim(pvalMatrix4)  # devuelve TRUE
+dim(BH_pvalMatrix4)
+```
+[1] TRUE TRUE
+[1] 156 497
+
+##> *BH_pvalMatrix4*
+
+```{r}
+saveRDS(BH_pvalMatrix4, file = "~/vlad/TFM_bioinf/RESULTS/BH_pvalMatrix4.rds")
+#BH_pvalMatrix4 = readRDS("BH_pvalMatrix4.rds")
+BH_pvalMatrix4 <- readRDS("~/vlad/TFM_bioinf/RESULTS/BH_pvalMatrix4.rds")
+```
+
+
+
+
+
+**Columnas y filas con menos de 0.1. Contabilizar ambas y ordenar de mayor a menor.**
+```{r}
+# Contar la cantidad de valores menores a 0.1 en cada fila y columna
+numFilBH_pvalMatrix4 <- apply(BH_pvalMatrix4, 1, function(x) sum(x < 0.1))
+numColBH_pvalMatrix4 <- apply(BH_pvalMatrix4, 2, function(x) sum(x < 0.1))
+
+# Ordenar las filas y columnas de la matriz en orden decreciente según la cantidad de valores menores a 0.1
+# pvalMatrix4BH_Ord <- BH_pvalMatrix4[order(numFilBH_pvalMatrix4, decreasing = TRUE), order(numColBH_pvalMatrix4, decreasing = TRUE)]
+```
+
+
+*Plot the most significant p-values Genes*
+```{r}
+# Ordenar ambos vectores de forma decreciente
+filasBH_ord <- sort(numFilBH_pvalMatrix4, decreasing = TRUE)
+colBH_ord <- sort(numColBH_pvalMatrix4, decreasing = TRUE)
+```
+
+# **Histogram Rows**
+```{r}
+# For rows
+#pdf(file = "~/157BONp-valTOT.pdf", width = 10)
+
+barplot(filasBH_ord, main = "Genes ordered by the number p-values<0.1 in the comparison of\n gene expression between wt patients and mut patients.",
+        xlab = "Genes presenting mutations in >= 20 patients",
+        ylab = "Numbers of p-value<0.1",
+        las = 2, # Colocar las etiquetas en vertical
+        names.arg = FALSE)
+
+#dev.off()
+
+
+#pdf(file = "~/157BONp-val50.pdf", width = 10)
+# Crear un vector de colores
+colores <- rep("#CCCCCC", length(filasBON_ord))
+colores[1:5] <- "red"
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(filasBH_ord[1:50], col = colores,
+        las = 2, # Colocar las etiquetas en vertical
+        cex.names = 0.5,
+        main = "First 50 genes ordered by the number p-values<0.1 in the comparison of\n gene expression between wt patients and mut patients.",
+        xlab = "Genes presenting mutations in >20 patients",
+        ylab = "Number of p-value<0.1")
+# Ajustar la posición del eje x
+title(xlab = "Columnas", line = 10)
+#dev.off()
+```
+
+# **Histograma columnas**
+```{r}
+###################################### For columns
+#pdf(file = "~/157sd2BONp-valorTOT.pdf", width = 10)
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(colBH_ord, main = "Genes ordered by the number of times that they present p-values less\n than 0.1 in the comparison of gene expression between wt patients and mut patients .",
+        xlab = "Genes with sd > 2",
+        ylab = "Number of p-values less than 0.1",
+        names.arg = FALSE)
+#dev.off()
+
+
+
+#pdf(file = "~/157sd2BONp-valor50.pdf", width = 10)
+colores <- rep("#CCCCCC", length(filasFoldchange_ord))
+colores[1:1] <- "red"
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(colBH_ord[1:50], col = colores,
+        main = "First 50 genes ordered by the number of p-values<0.1 in the comparison\n of gene expression between wt patients and mut patients.",
+        las=2,
+        cex.names = 0.5,
+        xlab = "Genes with sd > 2",
+        ylab = "Number of p-values less than 0.1",
+        )
+#dev.off()
+
+```
+
+
+
+# **Heat map Benjamini-Hochberg correction**
+
+## **Normal**
+```{r}
+#pdf(file = "~/157heatmapBON_pvalMatrix3.pdf")
+
+# Generar el heatmap
+heatmap(BH_pvalMatrix4, 
+        #Rowv = NA, 
+        #Colv = NA, 
+        col = colorRampPalette(c("red", "white"))(100), 
+        scale = "none", 
+        margins = c(15, 3))
+
+#dev.off()
+```
+
+## **Color**
+```{r}
+
+#pdf(file = "~/157heatmapCol_BON_pvalMatrix3.pdf")
+# Definir los cortes y etiquetas para los colores personalizados
+cuts <- c(0, 0.05, 0.1, 0.15, Inf)
+colors <- colorRampPalette(c("red", "darkorange", "yellow", rep("lightgrey", 17)))(100)
+
+# Asignar colores a los valores de p utilizando los cortes y etiquetas definidos anteriormente
+#col_matrix <- cut(pvalMatrix, breaks = cuts, labels = colors)
+
+# Generar el heatmap con los colores personalizados
+heatmap(BH_pvalMatrix4, col = colors, scale = "none", margins = c(15, 3))
+#dev.off()
+```
+
+
+##**p_value < 0.1**
+<!--
+
+**************** We remove from the BH_pvalMatrix4 the rows and columns that present a p-value greater than 0.1 to facilitate the visualization of the heatmap.
+
+```{r}
+# Eliminar filas y columnas que no tienen valores <= 0.1
+BH_pvalMatrix4_sub01 <- subset(BH_pvalMatrix4, rowSums(BH_pvalMatrix4 <= 0.1) > 0, colSums(BH_pvalMatrix4 <= 0.1) > 0)
+
+dim(BH_pvalMatrix4)
+dim(BH_pvalMatrix4_sub01)
+```
+###> **BH_pvalMatrix4_sub01**
+
+### **Normal<0.1**
+```{r}
+#pdf(file = "~/heatmapBON_pvalMatrix2.pdf")
+
+# Generar el heatmap
+heatmap(BH_pvalMatrix4_sub01, 
+        #Rowv = NA, 
+        #Colv = NA, 
+        col = colorRampPalette(c("red", "white"))(100), 
+        scale = "none", 
+        margins = c(15, 3),
+        cexRow = 0.6) # Ajustar el tamaño de fuente de los nombres de las filas
+
+#dev.off()
+```
+
+### **Color<0.1**
+```{r}
+
+#pdf(file = "~/heatmapCol_BON_pvalMatrix2_sub.pdf")
+# Definir los cortes y etiquetas para los colores personalizados
+cuts <- c(0, 0.05, 0.1, 0.15, Inf)
+colors <- colorRampPalette(c("red", "darkorange", "yellow", rep("lightgrey", 17)))(100)
+
+# Asignar colores a los valores de p utilizando los cortes y etiquetas definidos anteriormente
+#col_matrix <- cut(pvalMatrix, breaks = cuts, labels = colors)
+
+# Generar el heatmap con los colores personalizados
+heatmap(BH_pvalMatrix4_sub01, col = colors, scale = "none", margins = c(15, 3), cexRow = 0.6)
+#dev.off()
+```
+-->
+
+##**p-value < 0.05**
+<!--
+```{r}
+# Eliminar filas y columnas que no tienen valores <= 0.05
+BH_pvalMatrix4_sub05 <- subset(BH_pvalMatrix4, rowSums(BH_pvalMatrix4 <= 0.05) > 0, colSums(BH_pvalMatrix4 <= 0.05) > 0)
+
+dim(BH_pvalMatrix4)
+dim(BH_pvalMatrix4_sub05)
+```
+###> **BH_pvalMatrix4_sub05**
+
+###**Color<0.05**
+```{r}
+
+#pdf(file = "~/heatmapCol_BON_pvalMatrix2_sub.pdf")
+# Definir los cortes y etiquetas para los colores personalizados
+cuts <- c(0, 0.05, 0.1, 0.15, Inf)
+colors <- colorRampPalette(c("red", "darkorange", "yellow", rep("lightgrey", 17)))(100)
+
+# Asignar colores a los valores de p utilizando los cortes y etiquetas definidos anteriormente
+#col_matrix <- cut(pvalMatrix, breaks = cuts, labels = colors)
+
+# Generar el heatmap con los colores personalizados
+heatmap(BH_pvalMatrix4_sub05, col = colors, scale = "none", margins = c(15, 3), cexRow = 0.6)
+#dev.off()
+```
+-->
+
+# -------------------------------------------------------------
+
+
+# **The fold changes log2**
+
+*Trabajaremos con la matriz con "BH_pvalMatrix4"*...posteriormente tendremos que trabajar con la matrix de p-valores y la de foldchanges, por lo que ambas deben de tener las mismas dimensiones y genes para facilitar el trabajo.
+
+> dim(BH_pvalMatrix4)
+[1] 156 497
+
+the fold changes log2 (compara medias)       
+log2(average_1 / average_2)...para cuantificar la diferencia de espresión entre grupos: 
+average_1 <- mean(expression_of_mut_cases)
+average_2 <- mean(expression_of_wt_cases)
+
+
+Queremos comparar las medias de la expresión para los genes sd>2 según los grupos wt y mut para cada gen con sd>2.
+<!--
+Una desventaja y un grave riesgo de usar el cambio de pliegue en este entorno es que está sesgado [7] y puede pasar por alto genes expresados deferentemente con grandes diferencias (BA) pero proporciones pequeñas (A/B), lo que lleva a una alta tasa de fallas en alta. intensidades
+Digamos que hay 50 recuentos de lectura en el control y 100 recuentos de lectura en el tratamiento para el gen A. Esto significa que el gen A se expresa dos veces en el tratamiento en comparación con el control (100 dividido por 50 = 2) o el cambio de pliegue es 2. Esto funciona bien para genes sobreexpresados ya que el número corresponde directamente a cuántas veces se sobreexpresa un gen. Pero cuando es al revés (es decir, tratamiento 50, control 100), el valor del cambio de veces será 0,5 (todos los genes subexpresados tendrán valores entre 0 y 1, mientras que los genes sobreexpresados tendrán valores de 1 a infinito) . Para nivelar esto, usamos log2 para expresar el cambio de pliegue. Es decir, log2 de 2 es 1 y log2 de 0,5 es -1.
+-->
+ 
+```{r}
+# 1. Obtener los nombres de los genes (filas) de las que presentan p-valores inferiores a 0.1
+genes20mut_pval01 <- rownames(BON_pvalMatrix3)[which(BON_pvalMatrix3 <= 0.1)]
+
+
+# 1º Seleccionamos los genes con p-valor <0.1
+# 2º Calculamos las medias de expresión de los grupos wt y mut para cada gen
+# 3ª Aplicamos the fold changes ....log2(average_1 / average_2)...para cuantificar la diferencia entre grupos
+
+
+#************************** ORIGINAL
+#Selecciona los pacientes mutados y wt para un gen determinado (nameGenes20patMut) y compara la expresión génica de esos pacientes en todos los genes con sd>2 (genesExpSd2).
+for (g1 in nameGenes20patMut) {
+  for (g2 in namesGenesExpSd2) {
+    mutpatients2 <- getMutatedPatients(g1, mutations_filter)
+    wtpatients2 <- getWildtypePatients(g1, mutations_filter)
+    
+    #Coje la expresión estandarizada del gen mutado y del gen wt.
+    exprOfMutPatients <- log2(firehose_brca_expr[mutpatients2,g2]+1)
+    exprOfWtPatients <- log2(firehose_brca_expr[wtpatients2,g2]+1)
+    
+   
+    #Calcula el pvalor de pacientes mutados y wt.
+    pvalue3 <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+    #Incluye el pvalor en la matriz que creamos.
+    pvalMatrix3[g1,g2] <- pvalue3
+  }
+}
+```
+
+
+
+
+Para cada gen (genes con más de 20 pacientes con mutaciones) obtenemos los grupos wt  y mut . Calculamos la media de la expresión en ambos grupos y obtenemos el fold change con el que elaboramos un histograma decreciente según este valor.
+
+The groups for the genes are mut (expression of the genes of patients with mutations, of which there will be at least 20 patients) and wt (expression of the genes of patients without mutations for that gene, which will be the rest of the patients). The objective is to determine, with the fold change, if the significant p-value of these groups reflects a real difference.
+
+## **Preparing functions**
+```{r}
+# # Cambiamos los nombres de las filas por los de los genes con más de 20 pacientes con mutaciones para ese gen
+# nameGenes20patMut <- names(NumOfMutatedPatients[NumOfMutatedPatients >=20])
+# rownames(pvalMatrix4) = nameGenes20patMut
+# 
+# #cambiamos nombres de las columnas por los genes con sd >2.
+# namesGenesFilterExpSd2 <- names(expr_filterLog2_sd[expr_filterLog2_sd>2])
+# colnames(pvalMatrix4) = namesGenesFilterExpSd2
+
+
+
+# Función para obtener pacientes mutados para un gen
+getMutatedPatients <- function(gene, mutations_filter2) {
+  return(unique(mutations_filter2$patient[which(mutations_filter2$Hugo_Symbol==gene)]))
+}
+
+# Función para obtener pacientes sin mutaciones para un gen
+allpatients <- unique(mutations_filter2$patient)
+getWildtypePatients <- function(gene, mutations_filter2) {
+  return(setdiff(allpatients,unique(mutations_filter2$patient[which(mutations_filter2$Hugo_Symbol==gene)])))
+}
+```
+
+
+
+
+## **Matrix to store fold changes**
+Esta matriz contendrá los valores fold changes para cada cada gen sd >2 + 90% exp>2 (columnas) según los grupos wt y mut de los genes con más de 20 pacientes con mutaciones para ese gen (filas).
+
+
+
+firehose_brca_expr
+expr_filter90
+namesGenesFilterExpSd2
+
+
+*Se comparan las expresiones de un gen con sd>2, en base a los grupos de pacientes mut y wt para un gen con más de 20 pacientes con mutaciones.*
+
+
+
+```{r}
+
+# Seleccionar los genes con al menos 20 pacientes mutados y p-valor <0.1
+# genes20mut <- rownames(BH_pvalMatrix4_sub05)
+
+
+# Construimos matriz
+foldchanges <- matrix(
+  nrow = nrow(BH_pvalMatrix4),
+  ncol = ncol(BH_pvalMatrix4),
+  dimnames = list(rownames(BH_pvalMatrix4), colnames(BH_pvalMatrix4))
+)
+
+dim(BH_pvalMatrix4)
+#dim(BH_pvalMatrix4_sub01)
+dim(foldchanges)
+```
+[1] 156 497
+[1] 156 497
+
+
+
+## **Bucle fold changes log2**
+```{r}
+for (g in rownames(BH_pvalMatrix4)) {
+  for (g2 in colnames(BH_pvalMatrix4)) {
+    # Seleccionar los pacientes mutados y no mutados para el gen g en la matriz de mutaciones
+    mutpatients <- getMutatedPatients(g, mutations_filter2)
+    wtpatients <- getWildtypePatients(g, mutations_filter2)
+    
+    # *Obtener la expresión estandarizada del gen mutado y del gen wt* (Para los grupos creados con los pacientes mut y wt de la lista de "genes20mut", calcular el log2 de la expresión para cada gen "g2" de los genes con sd>2 en el dataset expr_filter).
+    
+    #Aunque el dataset "expr_filter90" tiene más genes que "colnames(BH_pvalMatrix4_sub05)", no importa porque solo se utilizarán los datos de expresión de los genes de interés.
+    exprOfMutPatients <- log2(expr_filter90[mutpatients, g2] + 1)
+    exprOfWtPatients <- log2(expr_filter90[wtpatients, g2] + 1)
+    
+    # Calcular el fold change y guardarlo en el vector de fold changes
+    average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+    average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+    foldchange <- (average_1 - average_2)
+    foldchanges[g, g2] <- foldchange
+}}
+#saveRDS(foldchanges, "foldchangesBH4.rds")
+#foldchanges <- readRDS("~/vlad/TFM_bioinf/RESULTS/foldchangesBH4.rds")
+
+#View(foldchanges)
+sum(is.na(foldchanges))
+```
+
+> sum(is.na(foldchanges))
+[1] 0
+
+
+###> *foldchanges*
+# -----------------------------------------------------------------------
+
+
+
+
+
+# **Excluding genes that are within that log2 foldchange range.**
+
+Lo haremos sobre los genes seleccionados en base a su desviación estandar ya que es sobre la expresión de los mismos, sobre la que hemos calculado su foldchange.
+
+ >log2(1.5) ..........0.5849625
+ <-log2(1.5).........-0.5849625
+ 
+ *El cálculo de foldchanges se hizo sobre con la estandarización log2 de la expresión génica, por lo que si queremos eliminar las expresiones del rango "+/-1,5" tenemos que aplicar el log2 a este valor para que el rango sea correcto.*
+ 
+```{r}
+foldchangesRANG <- foldchanges[, apply(foldchanges, 2, function(x) any(x > log2(1.5)) | any(x < -log2(1.5)))]
+
+dim(foldchanges)
+dim(foldchangesRANG)
+#View(foldchangesRANG)
+```
+
+##> *foldchangesRANG* 
+... tenemos una selección de 497 genes seleccionados según su expresión (transcripción) y 156 seleccionados según nº pacientes mutados.
+
+
+
+# **Histograms foldchanges**
+
+Columnas y filas fuera del rango log2(-1,5/1,5). Contabilizar ambas y ordenar decrecientemente:
+
+```{r}
+# Contar la cantidad de valores mayores y menores a 1.5 y -1.5 en cada fila y columna
+numFilOutOfRange <- apply(foldchangesRANG, 1, function(x) sum(x > log2(1.5) | x < -log2(1.5)))
+numColOutOfRange <- apply(foldchangesRANG, 2, function(x) sum(x > log2(1.5) | x < -log2(1.5)))
+
+
+# Ordenar ambos vectores de forma decreciente
+filasFoldchange_ord <- sort(numFilOutOfRange, decreasing = TRUE)
+colFoldchange_ord <- sort(numColOutOfRange, decreasing = TRUE)
+```
+
+
+*Llamaremos "mutated gens" a los datos de los genes con más de 20 pacientes con mutaciones para un mismo gen. A los genes con sd>2 los llamaremos "transcribed genes" ya que los datos de expresión que utilizamos para calcular la sd y foldchange provienen del análisis de la expresión mediante la cuantificación de los transcritos (RNAseq).*
+
+Con el histograma ordenado del número de foldchange significativo en cada gen mutado, podemos saber que genes mutados estan teniendo más impacto sobre los transcritos.
+
+Con el histograma de transcritos, podemos saber cuantos genes con mutaciones tienen efecto en cada transcrito.
+
+## **Histogram Rows foldchange**
+```{r}
+# For rows
+
+#pdf(file = "~/157BONp-valTOT.pdf", width = 10)
+
+barplot(filasFoldchange_ord, main = "Genes ordered by the number of times that they present foldchanges\n out of range -1,5/1,5 in the comparison of gene expression between wt patients and mut patients.",
+        xlab = "Genes presenting mutations in >= 20 patients",
+        ylab = "Nº foldchanges out of range -1,5/1,5",
+        las = 2, # Colocar las etiquetas en vertical
+        names.arg = FALSE)
+#dev.off()
+
+
+
+
+
+# Ajustar el tamaño de los márgenes
+par(mar = c(5, 6, 4, 2) + 0.1)  # c(margen inferior, margen izquierdo, margen superior, margen derecho)
+
+# Crear un vector de colores
+colores <- rep("#CCCCCC", length(filasFoldchange_ord))
+colores[1:3] <- "red"
+
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(filasFoldchange_ord[1:50], col = colores,
+        las = 2, # Colocar las etiquetas en vertical
+        cex.names = 0.5,
+        main = "First 50 Genes ordered by the number of foldchanges out of range -1,5/1,5 in\n the comparison of gene expression between wt and mut patients.",
+        xlab = "Genes presenting mutations in >20 patients (mutations groups)",
+        ylab = "Nº foldchanges out of range -1,5/1,5")
+
+# Ajustar la posición del eje x
+title(xlab = "Columnas", line = 10)
+
+# # Restaurar los márgenes predeterminados o ajustar según tus preferencias
+# par(mar = c(5, 4, 4, 2) + 0.1)
+
+```
+
+
+## **Histogram columns foldchange**
+```{r}
+###################################### For columns
+#pdf(file = "~/157sd2BONp-valorTOT.pdf", width = 10)
+# Crear un vector de colores
+colores <- rep("#CCCCCC", length(colFoldchange_ord))
+colores[1:4] <- "red"
+
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(colFoldchange_ord, main = "Genes ordered by the number of times that they present foldchanges out of range -1,5/1,5 in the comparison of gene expression between wt patients and mut patients.",
+        xlab = "Genes with sd > 2",
+        ylab = "Nº foldchanges out of range -1,5/1,5",
+        names.arg = FALSE)
+#dev.off()
+
+
+
+#pdf(file = "~/157sd2BONp-valor50.pdf", width = 10)
+
+# Ajustar el tamaño de los márgenes
+par(mar = c(5, 6, 4, 2) + 0.1)  # c(margen inferior, margen izquierdo, margen superior, margen derecho)
+
+# Crear el gráfico de barras y agregar los nombres de las columnas
+barplot(colFoldchange_ord[1:50], col = colores,
+        main = "First 50 Genes ordered by the number of foldchanges out of range -1,5/1,5 in\n the comparison of gene expression between wt and mut patients.",
+        las=2,
+        cex.names = 0.5,
+        xlab = "Genes with sd > 2 (Transcripts)",
+        ylab = "Nº foldchanges out of range -1,5/1,5",
+        )
+#dev.off()
+
+```
+
+
+
+# **Heatmap foldchanges**
+
+complex heatmap
+
+foldchangesRANG .....matriz con los valores foldchange fuera de rango. No ordenada según heatmap.
+
+```{r}
+min(foldchangesRANG)
+max(foldchangesRANG)
+```
+
+[1] -3.751193
+[1] 3.606956
+
+
+ >log2(1.5) ..........0.5849625
+ <-log2(1.5).........-0.5849625
+
+
+
+## **Normal**
+*El heatmap realizado con foldchangesRANG solo contendrá los valores seleccionados previamente*
+
+
+```{r}
+library("gplots")
+heatmap.2(foldchangesRANG,
+                            trace = "none",
+                            density.info = "none",
+                            col="bluered",
+                            key = TRUE,
+                            key.title = "Log2(Fold Change)",
+                            key.xlab = "",
+                            #symkey = FALSE
+                            xlab = "SDg",  
+                            ylab = "MUTg"
+                            )
+```
+
+
+
+```{}
+
+# Abre un dispositivo gráfico en formato PNG y especifica la ruta completa del archivo
+png(paste0("~/vlad/TFM_bioinf/IMG/heatmap_foldchangesRANG.png"))
+
+# Genera el gráfico de calor y lo imprime en pantalla
+heatmap.2(foldchangesRANG,
+           trace = "none",
+           density.info = "none",
+           col = "bluered",
+           key = TRUE,
+           key.title = "Log2(Fold Change)",
+           key.xlab = "")
+
+# Cierra el dispositivo gráfico
+dev.off()
+
+```
+
+
+
+
+
+# **Matrix order by HeatMap** 
+
+*Queremos obtener una matriz intersection entre los valores de interés de BH_pvalMatrix4 y foldchangesRANG. La matriz que obtengamos debe de tener el mismo orden que foldchangesRANG. Construiremos una matriz con el mismo orden para los pvalores, otra para los foldchange y un última para ambos. La matriz pvalores tendrá el mismo orden en filas y columnas, pero solo contendrá valores en las celdas con los pvalores de nuestro interés. La matriz foldchanges solo contendrá valores foldchanges de nuestro interés. Construiremos una última matriz intersección con las celdas que tienen los valores de nuestro interés (en rojo o azul), las que solo tienen uno de los valores (gris) y las que no tienen ningún valor de interés (blanco).*
+
+*Esta representación nos permitirá ver con más precisión cuales son los genes más relevantes tanto por su p-valor como por su foldchanges.*
+
+Realizaremos:
+matriz ordenada p-valores
+matriz ordenada foldchange
+matriz intersección p-val/foldchanges
+
+
+
+## **Order by Heatmap foldchangesRANG/BH_pvalMatrix4**
+*......................................................Con clustering*
+
+*Queremos visualizar las matrices foldchangesRANG y BH_pvalMatrix4 ordenadas según el resultado de heatmap(foldchangesRANG)*
+
+
+```{r}
+# Generar el heatmap y obtener la matriz reorganizada
+matHeatMap_fcRANG <- heatmap(foldchangesRANG, 
+        #Rowv = NA, 
+        #Colv = NA, 
+        col = colorRampPalette(c("blue", "white", "red"))(100), 
+        scale = "none", 
+        margins = c(15, 3))
+
+# Creamos matriz con estructura matHeatMap_fcRANG (el orden de filas y columnas se captura en los objetos heatmap_result$rowInd y heatmap_result$colInd):
+
+# Para foldchangesRANG:
+matFoldC_OrdHeatmap <- foldchangesRANG[matHeatMap_fcRANG$rowInd, matHeatMap_fcRANG$colInd]
+
+# Para BH_pvalMatrix4:
+matPval_OrdHeatmap <- BH_pvalMatrix4[matHeatMap_fcRANG$rowInd, matHeatMap_fcRANG$colInd]
+
+dim(matFoldC_OrdHeatmap)
+dim(matPval_OrdHeatmap)
+
+View(matFoldC_OrdHeatmap)
+View(matPval_OrdHeatmap)
+
+```
+
+###>*matFoldC_OrdHeatmap*
+###>*matPval_OrdHeatmap*
+
+
+
+###**Heatmap(matFoldC_OrdHeatmap)** testeo
+*Este apartado solo es para comprobar que el heatmap procesa correctamente la matriz guardada*
+El heatmap es el mismo que cuando lo hicimos sobre foldchangesRANG pero no tenemos los dendogramas al no realizar el clústering.
+
+
+```{r}
+heatmap.2(matFoldC_OrdHeatmap,
+          Colv = NA, Rowv = NA,
+          trace = "none",
+          density.info = "none",
+          col = "bluered",
+          #breaks = c(-4, -log2(1.5), log2(1.5), 4),
+          key = TRUE,
+          key.title = "Fold Changes",
+          key.xlab = "",
+          key.ylab = "",
+          symkey = FALSE,
+          revC = TRUE)
+
+# Reducir el margen superior e inferior
+#par(mar = c(2, 4, 2, 2))
+```
+
+
+
+###**Heatmap(matPval_OrdHeatmap)**
+
+> max(matPval_OrdHeatmap)
+[1] 0.9999997
+
+
+```{r}
+# Crear el mapa de calor con una paleta de colores personalizada
+heatmap.2(matPval_OrdHeatmap,
+          Colv = NA,
+          Rowv = NA,
+          trace = "none",
+          density.info = "none",
+          col = c("red", "white"),  # Utilizar directamente los colores rojo y blanco
+          breaks = c(0, 0.1, 1),  # Dividir los valores en dos grupos: menores a 0.1 y mayores o iguales a 0.1
+          key = TRUE,
+          key.title = "P-value",
+          key.xlab = "",
+          key.ylab = "",
+          symkey = FALSE,
+          revC = TRUE)
+
+```
+
+
+
+# ---------------------------------------------------
+## **Heatmap intersección (matrizPval_Fold)**
+*sin Clustering*
+
+
+*.....................una representación del "heatmap(foldchangesRANG)" donde podamos ver que interacciones entre genes tienen valores significativos para los p-val y foldchanges.*
+
+
+*Queremos obtener una matriz con la intersección de los pval y foldchange de interés*
+
+*Determinaremos los pvalor <0.1 y foldchange de interés "fuera de rango +/-log2(1.5)" para cada celda. Organizaremos los genes mutados (filas) y genes transcritos (columnas) según el número de valores de interés (según la intersección de estos "matrizPval_Fold") obteniendo dos barplot que ordenarán los genes decrecientemente según la suma del número de sucesos de interés.*
+
+
+
+
+### **Matriz intersección (OrdHeatmap)**
+
+
+*Utilizaremos las siguientes matrices en este y posteriores apartados. Estas son las que tienen los datos ordenados según Heatmap foldchangesRange (es la matriz que tiene filtados los valores de interés)*
+
+matFoldC_OrdHeatmap
+matPval_OrdHeatmap
+
+
+
+#### **P-values**
+*De la matriz de p-valores ordenada, seleccionamos los valores según nuestro criterio y los transportamos a una nueva matriz donde el resto de valores serán NA*
+
+
+En resumen, esta línea de código selecciona las celdas de matPval_OrdHeatmap que cumplen la condición y las copia en las celdas correspondientes de matrizHeatOrdPval_Fold. Esto asegura que solo las celdas que cumplen la condición en matPval_OrdHeatmap estén presentes en matrizHeatOrdPval_Fold, mientras que las celdas que no cumplen la condición permanecen como NA.
+
+```{r}
+#Creamos nueva matriz
+matrizSelecPval <- matrix(NA, nrow = nrow(matFoldC_OrdHeatmap), ncol = ncol(matFoldC_OrdHeatmap), dimnames = list(rownames(matFoldC_OrdHeatmap), colnames(matFoldC_OrdHeatmap)))
+
+#Creamos condición
+condicion <- (matFoldC_OrdHeatmap < -log2(1.5) | matFoldC_OrdHeatmap > log2(1.5)) & matPval_OrdHeatmap < 0.1
+
+#Save data by condition in new matrix
+matrizSelecPval[condicion] <- matPval_OrdHeatmap[condicion]
+#View(matrizSelecPval)
+```
+
+##### >*matrizSelecPval*
+
+
+**HeadMap P-values**
+*Resaltando pequeños valores: Los valores pequeños se magnifican en la escala logarítmica negativa. Esto puede ser útil para resaltar pequeñas diferencias o para enfocarse en valores que están cerca de cero.*
+
+*Mejor visualización en el heatmap: Al usar una paleta de colores adecuada, los cambios en los valores transformados pueden ser más fácilmente distinguibles en el heatmap. Esto puede ayudar a identificar patrones o tendencias en los datos de manera más clara.*
+
+*En resumen, al transformar los valores originales en una escala logarítmica negativa, podemos mejorar la visualización y la interpretación de los datos en el heatmap, lo que puede ayudar en el análisis y la comprensión de los datos.*
+
+
+```{r}
+max(-log10(matrizSelecPval),na.rm = TRUE)
+```
+
+
+*Calculamos el -log10 de los valores para dejar un resultado similar al exponente para estandarizar los datos y que el heatmap pueda representarse mejor cambiando la paleta de colores. El -log10 del valor del número con exponente más algo,da 57, Probamos 6 (una por cada 10) divisiones y prácticamente no cambia, por lo que lo hacemos con 11. En este caso hemos realizado una división en 11 partes para la paleta de colores, siendo el primero gris y el resto rojo.*
+
+```{r}
+heatmap(-log10(matrizSelecPval),
+        Rowv = NA,
+        Colv = NA,
+        col = colorRampPalette(c("grey", rep("red",11)))(100),
+        scale = "none",
+        margins = c(15, 3)
+        )
+```
+
+
+```{r}
+# Crear el mapa de calor con una paleta de colores personalizada
+heatmap.2(matrizSelecPval,
+          Colv = NA,
+          Rowv = NA,
+          trace = "none",
+          density.info = "none",
+          col = c("red", "white"),  # Utilizar directamente los colores rojo y blanco
+          breaks = c(0, 0.1, 1),  # Dividir los valores en dos grupos: menores a 0.1 y mayores o iguales a 0.1
+          key = TRUE,
+          key.title = "P-value",
+          key.xlab = "",
+          key.ylab = "",
+          symkey = FALSE,
+          key.par = list(mar = c(3, 3, 4, 0)),
+          xlab = "SD genes",  
+          ylab = "Mut genes",
+          revC = TRUE)
+
+```
+
+##### >*heatmap(matrizSelecPval)*
+
+
+
+
+#### **Foldchanges**
+*De la matriz de FOLDCHAN ordenada, seleccionamos los valores dentro de y los transportamos a una nueva matriz donde el resto de valores serán NA*
+
+*matrizSelecFold ha sido obtenida en base a log2 de la expresión génica, por lo que la selección de valores debe de ser sobre log2(1.5)=0.5849625  *
+
+
+
+```{r}
+
+# Creamos matriz receptora
+matrizSelecFold <- matrix(NA, nrow = nrow(matFoldC_OrdHeatmap), ncol = ncol(matFoldC_OrdHeatmap), dimnames = list(rownames(matFoldC_OrdHeatmap), colnames(matFoldC_OrdHeatmap)))
+# Creamos condición
+condicion <- (matFoldC_OrdHeatmap < -log2(1.5) | matFoldC_OrdHeatmap > log2(1.5)) & matPval_OrdHeatmap < 0.1
+# Añadimos datos de interés a matriz creada
+matrizSelecFold[condicion] <- matFoldC_OrdHeatmap[condicion]
+
+# Comprobamos valor mínimo
+min(abs(matrizSelecFold),na.rm = TRUE)
+
+View(matrizSelecFold)
+```
+
+##### >*matrizSelecFold*
+
+
+
+```{r}
+
+# Definir los colores y los límites para el degradado en la leyenda
+colores <- c("blue", "white", "red")
+limites <- c(-4, -0.58, 0.58, 4)
+
+heatmap.2(matrizSelecFold,
+          Colv = NA,
+          Rowv = NA,
+          trace = "none",
+          density.info = "none",
+          col = colores,
+          #col = colorRampPalette(colores)(3),
+          breaks = limites,
+          key = TRUE,
+          key.title = "Log2(Foldchange)",
+          key.xlab = "",
+          key.ylab = "",
+          xlab = "SD genes",  
+          ylab = "Mut genes",
+          symkey = FALSE,
+          revC = TRUE)
+
+
+
+```
+
+
+
+
+
+```{r}
+library(gplots)
+
+# Definir los colores y los límites para el degradado en la leyenda
+colores <- c("blue", "white", "red")
+limites <- c(-4, -0.58, 0.58, 4)
+
+# Ajustar los márgenes de la figura para acercar las etiquetas del eje
+#par(mar = c(2, 2, 2, 2))  # bottom, left, top, right
+
+# Crear el heatmap
+heatmap.2(matrizSelecFold,
+          Colv = NA,
+          Rowv = NA,
+          trace = "none",
+          density.info = "none",
+          col = colorRampPalette(colores)(3),
+          breaks = limites,
+          key = TRUE,
+          key.title = "Log2(Foldchange)",
+          key.xlab = "",
+          key.ylab = "",
+          xlab = "SD genes",  
+          ylab = "Mut genes",
+          symkey = FALSE,
+          revC = TRUE,
+          key.par = list(mar = c(3, 3, 4, 0)),  # Ajustar los márgenes internos de la leyenda
+          labRow = "",  # Ocultar los nombres de las filas
+          labCol = "",   # Ocultar los nombres de las columnas
+          margins = c(3, 3)
+)
+
+```
+
+##### >*heatmap(matrizSelecFold)*
+
+
+# ---------------------------------------------------
+
+
+
+# **Barplot complete matrix according to number of intersection values**
+*Es lo mismo que Barplot matriz filtrada pero con algunos genes sin valores de interés*
+
+## **For Transcribed Genes (sd>2)**
+
+```{r}
+# Sumar el total de valores de interés para cada gen (p-valores y fold change)
+total_val_genesSD <- colSums(matrizPval_Fold >0)
+# colSums realiza una suma de los elementos seleccionados que componen una misma columna
+
+# Ordenar los elementos en orden decreciente
+total_val_genesSD <- sort(total_val_genesSD, decreasing = TRUE)
+
+# Crear gráfico de barras para los genesSD
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesSD, las = 2, xlab = "GenesSD", ylab = "Total Counts",
+        main = "Total number of p-values < 0.1 and fold changes\n outside range [-log2(1.5), log2(1.5)] for each GenesMUT")
+
+# Para los primeros 50
+colores <- rep("#CCCCCC", length(total_val_genesSD))
+colores[1:5] <- "red"
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesSD[1:50], col = colores,
+        main = "First 50 Genes ordered by the number of p-values < 0.1\n and fold changes outside range [-log2(1.5), log2(1.5)].",
+        las=2,
+        cex.names = 0.5,
+        xlab = "Genes Transcripts",
+        ylab = "Nº foldchanges out of range and p-value<0.1",
+        )
+
+```
+
+
+
+
+## **For Mutated Genes (mutated patients >=20)**
+
+```{r}
+# Sumar el total de valores de interés para cada gen (p-valores y fold change)
+total_val_genesMUT<- rowSums(matrizPval_Fold >0)
+# colSums realiza una suma de los elementos seleccionados que componen una misma columna
+
+# Ordenar los elementos en orden decreciente
+total_val_genesMUT <- sort(total_val_genesMUT, decreasing = TRUE)
+
+# Crear gráfico de barras para los genesSD
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesMUT, las = 2, xlab = "GenesMUT", ylab = "Total Counts",
+        main = "Total number of p-values < 0.1 and fold changes\n outside range [-log2(1.5), log2(1.5)] for each GenesMUT")
+
+# Para los primeros 50
+colores <- rep("#CCCCCC", length(total_val_genesMUT))
+colores[1:5] <- "red"
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesMUT[1:50], col = colores,
+        main = "First 50 Genes ordered by the number of p-values < 0.1\n and fold changes outside range [-log2(1.5), log2(1.5)].",
+        las=2,
+        cex.names = 0.5,
+        xlab = "Genes Mutated",
+        ylab = "Nº foldchanges out of range and p-value<0.1",
+        )
+
+```
+
+
+#*******************************************************************
+
+# **Filtering matrices heatmap**
+*Eliminamos filas y columnas que solo tengan valores NA*
+
+...............ambas matrices se formaron teniendo en cuenta los pval y foldchanges que cumplian las condiciones en ambos casos, dando lugar a las combinaciones de genes seleccionadas.
+
+matrizSelecPval
+matrizSelecFold
+
+
+```{r}
+matrizSelecPval_sin_na <- matrizSelecPval[rowSums(!is.na(matrizSelecPval)) > 0, colSums(!is.na(matrizSelecPval)) > 0]
+
+matrizSelecFold_sin_na <- matrizSelecFold[rowSums(!is.na(matrizSelecFold)) > 0, colSums(!is.na(matrizSelecFold)) > 0]
+
+
+dim(matrizSelecPval)
+dim(matrizSelecFold)
+dim(matrizSelecPval_sin_na)
+dim(matrizSelecFold_sin_na)
+```
+[1] 156 497
+[1] 156 497
+[1] 152 490
+[1] 152 490
+
+> identical(colnames(matrizSelecPval_sin_na), colnames(matrizSelecFold_sin_na))
+[1] TRUE
+> identical(rownames(matrizSelecPval_sin_na), rownames(matrizSelecFold_sin_na))
+[1] TRUE
+
+##>*matrizSelecPval_sin_na*
+##>*matrizSelecFold_sin_na*
+
+```{r}
+#saveRDS(matrizSelecPval_sin_na, "~/vlad/TFM_bioinf/RESULTS/matrizSelecPval_sin_na.rds")
+matrizSelecPval_sin_na <- readRDS("~/vlad/TFM_bioinf/RESULTS/matrizSelecPval_sin_na.rds")
+
+#saveRDS(matrizSelecFold_sin_na, "~/vlad/TFM_bioinf/RESULTS/matrizSelecFold_sin_na.rds")
+matrizSelecFold_sin_na <- readRDS("~/vlad/TFM_bioinf/RESULTS/matrizSelecFold_sin_na.rds")
+```
+
+
+
+
+
+
+
+# **Barplot filtered matrix intersection values**
+
+
+matrizSelecPval_sin_na
+matrizSelecFold_sin_na
+
+## **For Transcribed Genes (sd>2)**
+
+```{r}
+# Sumar el total de valores de interés para cada gen (p-valores y fold change)
+total_val_genesSD <- colSums(!is.na(matrizSelecFold_sin_na))
+# colSums realiza una suma de los elementos seleccionados que componen una misma columna
+
+# Ordenar los elementos en orden decreciente
+total_val_genesSD <- sort(total_val_genesSD, decreasing = TRUE)
+```
+
+
+```{r}
+# Crear gráfico de barras para los genesSD
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesSD, las = 2, xlab = "GenesSD", ylab = "Total Counts",
+        main = "Total number of p-values < 0.1 and fold changes\n outside range [-log2(1.5), log2(1.5)] for each GenesMUT")
+
+# Para los primeros 50
+colores <- rep("#CCCCCC", length(total_val_genesSD))
+colores[1:5] <- "red"
+par(mar = c(5, 4, 4, 1) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesSD[1:50], col = colores,
+        main = "First 50 Genes ordered by the number of fold changes\n outside range [-log2(1.5), log2(1.5)] and p-value<0.1",
+        las=2,
+        cex.names = 0.5,
+        xlab = "SD genes",
+        ylab = "Nº Cases fold changes and p-value",
+        )
+
+```
+
+
+
+## **For Mutated Genes (mutated patients >=20)**
+
+```{r}
+# Sumar el total de valores de interés para cada gen (p-valores y fold change)
+total_val_genesMUT <- rowSums(!is.na(matrizSelecPval_sin_na))
+# colSums realiza una suma de los elementos seleccionados que componen una misma columna
+
+# Ordenar los elementos en orden decreciente
+total_val_genesMUT <- sort(total_val_genesMUT, decreasing = TRUE)
+```
+
+
+```{r}
+# Crear gráfico de barras para los genesSD
+par(mar = c(5, 4, 4, 6) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesMUT, las = 2, xlab = "GenesMUT", ylab = "Total Counts",
+        main = "Total number of p-values < 0.1 and fold changes\n outside range [-log2(1.5), log2(1.5)] for each GenesMUT")
+
+# Para los primeros 50
+colores <- rep("#CCCCCC", length(total_val_genesMUT))
+colores[1:5] <- "red"
+par(mar = c(5, 5, 4, 1) + 0.1)# Ajustar los márgenes exteriores para alejar el título del borde
+barplot(total_val_genesMUT[1:50], col = colores,
+        main = "First 50 Genes ordered by the number of fold changes\n outside range [-log2(1.5), log2(1.5)] and p-value<0.1",
+        las=2,
+        cex.names = 0.5,
+        xlab = "Mut genes",
+        ylab = "Nº Cases fold changes and p-value",
+        )
+
+```
+
+#********************************************************************
+
+
+dim(matrizSelecPval_sin_na)
+dim(matrizSelecFold_sin_na)
+

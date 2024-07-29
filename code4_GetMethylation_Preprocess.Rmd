@@ -1,0 +1,1706 @@
+
+
+
+# **1. Downloading data (2 opciones)**
+
+## **Downloading methylation positions**
+El objeto "IlluminaHumanMethylation450kmanifest" se refiere al paquete "IlluminaHumanMethylation450kmanifest" en R. Este paquete forma parte del proyecto Bioconductor y proporciona funcionalidades para acceder y trabajar con el archivo de manifiesto asociado al array de metilación del ADN Illumina HumanMethylation450K.
+
+El archivo de manifiesto contiene información detallada sobre los sitios CpG (puntos de metilación) en el genoma humano que están representados en el array Illumina HumanMethylation450K. Incluye información sobre las sondas utilizadas, su ubicación genómica, anotaciones adicionales, como nombres de genes y características genómicas asociadas, y otros detalles relevantes.
+
+El paquete "IlluminaHumanMethylation450kmanifest" proporciona funciones y métodos para acceder y consultar esta información de manera eficiente. Esto incluye la posibilidad de recuperar coordenadas genómicas, obtener anotaciones de sitios CpG específicos, filtrar sondas basadas en criterios específicos, realizar búsquedas y manipulaciones de datos relacionados con el manifiesto del array de metilación del ADN.
+
+En resumen, el paquete "IlluminaHumanMethylation450kmanifest" en R facilita el acceso y la manipulación de la información del manifiesto del array Illumina HumanMethylation450K, permitiendo un análisis más eficiente y preciso de los datos de metilación del ADN generados a partir de este array.
+
+```{r}
+# BiocManager::install("IlluminaHumanMethylation450kanno.ilmn12.hg19")
+library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+library(IlluminaHumanMethylation450kmanifest)   
+cpgAnno = getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+```
+###> **cpgAnno**
+
+
+> View(cpgAnno)
+
+> class(cpgAnno)
+[1] "DFrame"
+attr(,"package")
+[1] "S4Vectors"
+
+> View(as.matrix(cpgAnno))
+
+> View(cpgAnno@listData)
+
+El paquete S4Vectors es parte del proyecto Bioconductor y proporciona un marco de trabajo para trabajar con datos de secuencias y otros vectores grandes en R. La clase DFrame representa un objeto similar a un data frame optimizado para el almacenamiento y manipulación de datos a gran escala.
+
+En el contexto del análisis de metilación del ADN, es común utilizar los objetos S4Vectors y DFrame para almacenar y manipular la información de anotación asociada a los arrays de metilación del ADN. Estos objetos permiten el almacenamiento y la recuperación eficiente de grandes cantidades de datos, como coordenadas genómicas, anotaciones de sondas y otra información relevante.
+
+Al utilizar la clase DFrame del paquete S4Vectors, es probable que el objeto cpgAnno contenga la información de anotación para los sitios de CpG en el array Illumina HumanMethylation450K, lo que te permitirá realizar análisis y tareas de procesamiento adicionales en los datos de metilación del ADN.
+
+```{r}
+dat.cpgAnno <- as.data.frame(cpgAnno)
+saveRDS(dat.cpgAnno, "dat.cpgAnno.rds")
+dat.cpgAnno <- readRDS("~/vlad/TFM_bioinf/DescargasDatos/dat.cpgAnno.rds")
+
+View(dat.cpgAnno)
+```
+###> **dat.cpgAnno**
+
+
+
+
+## **Downloading methylation status**
+
+La tabla cpgAnno contiene la información de qué sitios CpG pertenecen a qué gen. La información sobre el estado de metilación de estos sitios CpG se encuentra en el conjunto de datos TCGA. 
+
+---------------------------------------------------------
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("TCGAbiolinks")
+
+# library(TCGAbiolinks)
+```
+
+```{r}
+# Descargar los datos de metilación del proyecto seleccionado
+query_met <- GDCquery(project = "TCGA-BRCA", 
+                      data.category = "DNA Methylation", 
+                      data.type = "Methylation Beta Value",
+                      platform = "Illumina Human Methylation 450",
+                      legacy = FALSE)  # Utilizar datos actualizados, no legados
+
+GDCdownload(query_met)
+
+
+## Para guardar los datos en un carpeta y cargarlos en el environment. Al no definir summarizedExperiment = FALSE, el objeto creado será summarizedExperiment.
+
+library(sesameData)
+
+met_data <- GDCprepare(query_met, 
+                  save=TRUE,
+                  save.filename = "GBM_Met_data.rds",
+                  summarizedExperiment = FALSE
+                  )
+
+
+#saveRDS(met_data, "met_data.rds")
+Patients_valCpG <- t(readRDS("met_data.rds"))
+#Patients_valCpG <- t(Patients_valCpG)
+
+```
+
+
+> class(met_data)
+[1] "matrix" "array" 
+> dim(Patients_valCpG)
+[1]    895 485577
+
+```{}
+
+# Para trabajar con SummarizedExperiment:
+###########################################
+# # Obtener la matriz de datos de metilación del objeto SummarizedExperiment
+# # met_matrix <- as.data.frame(SummarizedExperiment::assay(data.met))
+# # met_matrix <- as.data.frame(assay(data.met))
+# 
+# # Convert SummarizedExperiment in data.frame to transposing
+# # Patients_valCpG <- as.data.frame(assay(met_data))
+# # Patients_valCpG <- t(Patients_valCpG)
+############################################
+
+```
+###> **Patients_valCpG**
+
+#**1.1.Check patients**
+Comprobamos si los pacientes coinciden con los de nuestros datos.
+
+Patients_valCpG
+mutations_filter2$patient
+
+```{r}
+# length(intersect(sapply(strsplit(rownames(Patients_valCpG), "-"), function(x) paste(x[1:3], collapse = "-")), mutations_filter2$patient))
+
+length(intersect(substr(rownames(Patients_valCpG), 1, 12), mutations_filter2$patient))
+```
+Muestras totales
+> length(substr(rownames(Patients_valCpG), 1, 12))
+[1] 895
+> length(rownames(Patients_valCpG))
+[1] 895
+
+Pacientes totales Patients_valCpG
+> length(unique(substr(rownames(Patients_valCpG), 1, 12)))
+[1] 791
+
+> length(unique(substr(rownames(Patients_valCpG), 1, 16)))
+[1] 893
+
+Pacientes totales mutations_filter2
+> length(unique(mutations_filter2$patient))
+[1] 967
+
+.............los datasets comparten 680 pacientes.
+.............trabajaremos solo con los pacientes que coincidan.
+
+
+##**Filtering patients**
+
+*Extraemos los pacientes que coinciden en ambos datasets:*
+en mutations_filter2 y Patients_valCpG.
+
+
+```{r}
+# Nº Nombres que coinciden
+length(intersect(substr(rownames(Patients_valCpG), 1, 12), mutations_filter2$patient))
+
+matching_names <- intersect(substr(rownames(Patients_valCpG), 1, 12), mutations_filter2$patient)
+# Filtrar las filas de mutations_filter2 que tienen nombres coincidentes
+mutations_filter3_patCpG <- mutations_filter2[mutations_filter2$patient %in% matching_names, ]
+
+
+dim(mutations_filter2)
+dim(mutations_filter3_patCpG)
+```
+####>*mutations_filter3_patCpG*
+
+
+
+
+# **2. Determining methylation average**
+*Media metilación genes/pacientes*
+
+Determinar media de metilación por paciente/gen ….para hacernos una idea del número de pacientes que hay por nivel de metilación para los diferentes genes. Luego los pacientes serán clasificados por nivel de metilación según cada gen.
+
+Media metilación por gen y por muestra (una muestra tumoral por paciente)
+
+<!--
+De Patients_valCpG tenemos que utilizar las muestras de interés (una por paciente) para calcular la media de metilación de cada gen. Con as.matrix(cpgAnno) podemos determinar a que genes pertenece cada CpG.
+-->
+
+*En este código hemos indexado las matrices para permitir el uso de Patients_valCpG[ ,cpgs].*
+
+
+##**Indexing datasets**
+
+> dim(dat.cpgAnno)
+[1] 485512     33
+> dim(cpgAnno)
+[1] 485512     33
+> dim(Patients_valCpG)
+[1]    895 485577
+
+View(Patients_valCpG[1:10, 1:10])
+View(dat.cpgAnno[1:10,])
+
+> View(dat.cpgAnno_ord[cpgs,])
+> View(as.matrix(cpgAnno[cpgs,]))
+> View(as.matrix(cpgAnno[cpgs[c(1:4, 18:23)], ]))
+
+Comprobamos que todos los CpG de dat.cpgAnno están en Patients_valCpG:
+```{r}
+filas_faltantes <- setdiff(rownames(dat.cpgAnno), colnames(Patients_valCpG))
+length(filas_faltantes)
+```
+[1] 0
+
+
+
+Extraemos las columnas de Patients_valCpG (CpGs) cuyo nombre coincida con los nombres de las filas cpgAnno para tener los mismos CpGs en ambos dataset:
+```{r}
+# Eliminar columnas Patients_valCpG cuyos nombres no esten en los nombres  de las filas  de dat.cpgAnno.
+
+Patients_valCpG.sub <- Patients_valCpG[, intersect(colnames(Patients_valCpG), rownames(dat.cpgAnno))]
+```
+
+> dim(dat.cpgAnno)
+[1] 485512     33
+> dim(Patients_valCpG.sub)
+[1]    895 485512
+> length(intersect(colnames(Patients_valCpG.sub), rownames(dat.cpgAnno)))
+[1] 485512
+
+
+```{r}
+saveRDS(Patients_valCpG.sub,"~/vlad/TFM_bioinf/RESULTS/Patients_valCpG.sub.rds")
+Patients_valCpG.sub <- readRDS("~/vlad/TFM_bioinf/RESULTS/Patients_valCpG.sub.rds")
+```
+###>*Patients_valCpG.sub*
+
+
+Igualamos índices
+```{r}
+#obtiene los índices correspondientes en dat.cpgAnno para los nombres de columna de Patients_valCpG y luego reordena dat.cpgAnno según esos índices para generar la matriz dat.cpgAnno_ord.
+
+# Obtener los índices correspondientes en cpgAnno
+indices <- match(colnames(Patients_valCpG.sub), rownames(dat.cpgAnno))
+# Reordenar cpgAnno utilizando los índices
+dat.cpgAnno_ord <- dat.cpgAnno[indices, , drop = FALSE]
+
+
+
+
+#table[,gene] <- Patients_valCpG[ ,cpgs] #Selecciona indices columnas con el mismo nombre.
+# Comprobamos índices en ambos datasets. Devuelve vector TRUE/FALSE
+nombres_filas_iguales <- rownames(dat.cpgAnno_ord) == colnames(Patients_valCpG.sub)
+
+
+
+# Comprobamos la reorganización para dat.cpgAnno_ord en base a Patients_valCpG.sub es correcta.
+rownames(dat.cpgAnno)[1:5]
+rownames(dat.cpgAnno_ord)[1:5]
+colnames(Patients_valCpG.sub)[1:5]
+
+```
+dim(dat.cpgAnno_ord)
+dim(Patients_valCpG.sub)
+
+> dim(dat.cpgAnno_ord)
+[1] 485512     33
+> dim(Patients_valCpG.sub)
+[1]    895 485512
+length(intersect(colnames(Patients_valCpG.sub), rownames(dat.cpgAnno_ord)))
+[1] 485512
+
+Comprobamos que las filas de la nueva matriz dat.cpgAnno_ord mantienen los datos respectivos para los nombres de filas. 
+```{r}
+dat.cpgAnno["cg03948744", "UCSC_RefGene_Name"]
+dat.cpgAnno_ord["cg03948744", "UCSC_RefGene_Name"]
+```
+Coinciden el orden de los CpG y los valores de dat.cpgAnno_ord para cada fila se mantienen con su respectivo nombre de fila.
+
+```{r}
+saveRDS(dat.cpgAnno_ord,"~/vlad/TFM_bioinf/RESULTS/dat.cpgAnno_ord.rds")
+dat.cpgAnno_ord <- readRDS("~/vlad/TFM_bioinf/RESULTS/dat.cpgAnno_ord.rds")
+```
+
+###>*dat.cpgAnno_ord*
+
+
+*Procedemos a ejecutar el código con los dataset indexados:*
+
+##**Preparing matrix**
+
+Patients_valCpG.sub
+```{r}
+genelist490 <- colnames(matrizSelecFold_sin_na)
+
+table <- matrix(NA, nrow=length(rownames(Patients_valCpG.sub)), ncol=length(genelist490))
+rownames(table) <- rownames(Patients_valCpG.sub)  
+colnames(table) <- genelist490
+```
+> dim(table)
+[1] 895 490
+
+##**Iterating**
+*para obtener la media de metilación para cada gen de cada paciente*
+```{r}
+# head(genelist490)
+# gene <- genelist490[3]
+
+#Seleccionamos valores cpgs para cada gen
+for (gene in genelist490){
+cpgs <- unique(c(which(grepl(paste("^",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste("^",gene,";",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste(";",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name))))
+if(length(cpgs) == 1)   { #Si tiene solo 1 valor, rowMeans solo trabaja con más de un valor
+   table[,gene] <- Patients_valCpG.sub[ ,cpgs] #Selecciona indices columnas con el mismo nombre.
+ } else{ #rowMeans solo trabaja con más de un valor, actua sobre cada fila (paciente)
+   table[,gene] <- rowMeans(Patients_valCpG.sub[,cpgs],na.rm = TRUE)
+ }
+}
+
+View(table[1:10,])
+#View(as.matrix(cpgAnno[cpgs,]))
+
+
+#saveRDS(table,"~/vlad/TFM_bioinf/RESULTS/mediasCpG_genes.rds")
+#mediasCpG_genes <- readRDS("~/vlad/TFM_bioinf/RESULTS/mediasCpG_genes.rds")
+```
+####>*mediasCpG_genes*
+
+
+> length(unique(substr(rownames(mediasCpG_genes), 1, 16)))
+[1] 893
+> length(unique(substr(rownames(mediasCpG_genes), 1, 12)))
+[1] 791
+> 893-791
+[1] 102
+
+..................pacientes con varias muestras (en diferente temporalidad) OJO!!! 
+Usar 16 dígitos para obtener los datos de cada paciente.
+
+> length(intersect(colnames(mediasCpG_genes), genelist490_notNA))
+[1] 480
+
+
+
+
+
+
+#**2.3. Checking result**
+##**Checking a gene result**
+Para el paciente 1 de table, comprobar que los valores CpG son los correctos para los genes correspondientes.
+
+> table[1, 1:5]
+  C6orf97     THSD4      CA12     GATA3     ANXA9 
+0.2267475 0.8303120 0.3074001 0.3744317 0.5829429
+> genelist490[1:5]
+[1] "C6orf97" "THSD4"   "CA12"    "GATA3"   "ANXA9" 
+
+Buscamos un gen con na en table:
+```{r}
+gene <- "CYP21A2"
+#gene <- genelist490[3]
+cpgs <- unique(c(which(grepl(paste("^",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste("^",gene,";",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste(";",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name))))
+cpgs
+```
+
+Obtendremos, mediante los índices, los nombres de los cpgs de un gen:
+```{r}
+cpgs_names <- rownames(dat.cpgAnno_ord)[cpgs] # selecciona los nombres de las filas en la matriz cpgAnno que corresponden a los índices indicados por el vector cpgs.
+cpgs_names
+
+
+cpgs_names <- colnames(Patients_valCpG.sub)[cpgs] # selecciona los nombres de     en la matriz cpgAnno que corresponden a los índices indicados por el vector cpgs. 
+cpgs_names
+```
+
+```{r}
+all(cpgs_names %in% colnames(Patients_valCpG.sub))
+```
+
+
+
+Verificar aquellos nombres de columnas del dataset Patients_valCpG.sub, que coinciden con los nombres de cpgs y tienen valores Na. 
+
+"CYP21A2"
+```{r}
+#Get CpGs in Patients_valCpG.sub whit all yours values NA
+col_NA_total <- colnames(Patients_valCpG.sub)[colSums(is.na(Patients_valCpG.sub)) == nrow(Patients_valCpG.sub)]
+length(col_NA_total)
+
+#CpGs of Gene whit all NA  
+col_NA_cpgs <- col_NA_total[col_NA_total %in% cpgs_names]
+col_NA_cpgs
+length(col_NA_cpgs)
+
+cpgs_names
+length(cpgs_names)
+
+#CpGs of Gene whitout all values whit NA.
+col_no_NA_cpgs <- setdiff(cpgs_names, col_NA_cpgs)
+col_no_NA_cpgs
+#...................IF AT LEAST Gene have 1 CpG here, the result is wrong.
+```
+
+Obtenemos valores CgP de cpgs_names para (gene <- "CYP21A2") en el dataset Patients_valCpG.sub
+```{r}
+View(Patients_valCpG.sub[, cpgs_names])
+View(Patients_valCpG[, cpgs_names])
+```
+
+Todos los valores de metilación para los CpG del gen "CYP21A2" son Na. La selección de valores CpG para calcular la media de metilación por gen es correcta.
+
+
+
+
+
+##**Checking NA genes**
+
+Comprobamos el número total de Na en el nuevo dataset con medias de metilación(table).
+```{r}
+col_NA_table <- colnames(table)[colSums(is.na(table)) == nrow(table)]
+length(col_NA_table)
+col_NA_table
+```
+
+Comprobamos el número total de columnas con todos los valores Na en el nuevo dataset con medias de metilación (table).
+```{r}
+# Listado con los CpG (columnas de Patients_valCpG.sub) con todos los valores NA ..............hecho más arriba.
+
+# col_NA_total <- colnames(Patients_valCpG.sub)[colSums(is.na(Patients_valCpG.sub)) == nrow(Patients_valCpG.sub)]
+```
+
+
+```{r}
+#gene <- "CYP21A2"
+#gene <- genelist490
+
+# Obtenemos cpgs del gen
+for (gene in col_NA_table){
+  
+  cpgs <- unique(c(which(grepl(paste("^",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste("^",gene,";",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste(";",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name))))
+  
+  
+  cat("\n Results for gen", gene, ":\n")
+  # Obtenemos los nombres de los cpgs
+  cpgs_names <- rownames(dat.cpgAnno_ord)[cpgs]
+  #length(cpgs_names)
+  cat(length(cpgs_names), "Total CpGs","\n")
+  
+  # Obtenemos los CpG del gen que tienen todos los valores NA. 
+  col_NA_cpgs <- col_NA_total[col_NA_total %in% cpgs_names]
+  #col_NA_cpgs
+  #length(col_NA_cpgs)
+  cat(length(col_NA_cpgs), "CpGs whit all values NA","\n")
+  
+
+  #Obtenemos CpG que tienen algún valor no NA.
+  col_no_NA_cpgs <- setdiff(cpgs_names, col_NA_cpgs)
+  #col_no_NA_cpgs
+cat(length(col_no_NA_cpgs), "CpGs whit some value not NA ","\n")
+  
+}
+
+#(Patients_valCpG.sub[, cpgs_names])
+```
+
+Gens CDHR3 and GTF2H2B are not in cpgAnno.
+
+
+
+Delete names of vector genelist490 that are in vector col_NA_table.
+```{r}
+# genelist490 - col_NA_table
+# colnames(mediasCpG_genes) = genelist490
+
+ 
+genelist490_notNA <- genelist490[!genelist490 %in% col_NA_table]
+length(genelist490_notNA)
+length(genelist490)
+```
+
+###>*genelist490_notNA*
+
+
+mediasCpG_genes
+> sum(apply(mediasCpG_genes, MARGIN = 1, FUN = function(x) any(is.na(x))))
+[1] 895 ..................Pacientes con algún valor NA
+> sum(apply(mediasCpG_genes, MARGIN = 2, FUN = function(x) any(is.na(x))))
+[1] 27 ...............columnas con algún valor NA
+
+columnas_con_na <- colnames(mediasCpG_genes)[colSums(is.na(mediasCpG_genes)) > 0]
+columnas_con_na <- colnames(mediasCpG_genes)[apply(mediasCpG_genes, 2, function(x) any(is.na(x)))]
+> columnas_con_na
+ [1] "CYP21A2"   "C4A"       "GLYATL1"   "OMD"       "LOC440905" "FABP4"     "TPSB2"     "TPSAB1"    "OGN"       "CDHR3"     "SLITRK6"  
+[12] "IL33"      "KRT17"     "ANXA8"     "PTX3"      "CKMT1B"    "IGJ"       "ADAM6"     "CLDN8"     "CST1"      "GTF2H2B"   "CBS"      
+[23] "IL8"       "GLYATL2"   "IDO1"      "ADAMDEC1"  "MUM1L1"   
+> View(mediasCpG_genes[columnas_con_na])
+
+columnas_con_todos_na <- colnames(mediasCpG_genes)[colSums(is.na(mediasCpG_genes)) == nrow(mediasCpG_genes)]
+> columnas_con_todos_na
+ [1] "CYP21A2"   "LOC440905" "TPSB2"     "TPSAB1"    "CDHR3"     "KRT17"     "ANXA8"     "ADAM6"     "GTF2H2B"   "CBS"  
+ 
+ .......................... genes sin datos en mediasCpG_genes.   >>>>>>>>>>>>>>>>No obtendremos resultado de metilación para estos genes, Tenemos que eliminarlos de genelist490. Para los genes que tienen algunos NA, no obtendremos resultado de metilación para esos pacientes.
+
+mediasCpG_genes[,columnas_con_na]
+
+
+
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#2.4**Checking patients in datasets**
+
+
+
+***********************************************
+***********
+
+###**Igualamos pacientes filter4:**
+
+> length(intersect(substr(rownames(Patients_valCpG), 1, 12), mutations_filter4_patCpG_notABC$patient))
+[1] 680
+
+> length(intersect(substr(rownames(Patients_valCpG), 1, 12), substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 12)))
+[1] 680
+
+> length(intersect(substr(rownames(Patients_valCpG), 1, 16), substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 16)))
+[1] 669
+
+
+```{r}
+matching_namesTest <- intersect(substr(rownames(Patients_valCpG), 1, 12), substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 12))
+```
+
+> length(matching_namesTest)
+[1] 680
+
+.....Comprobamos si hay duplicados:
+> matching_namesTest[duplicated(matching_namesTest)]
+character(0)
+
+
+ ...no tenemos duplicados, la diferencia de conincidencia en el número de muestras al cambiar el número de carácteres se debe a que hay 11 muestras de diferente temporalidad para un mismo paciente (en cada caso) en los distintos datasets. Las eliminamos.
+
+
+```{r}
+# Guardamos coincidencias:
+matching_names <- intersect(substr(rownames(Patients_valCpG), 1, 16), substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 16))
+
+
+
+# Guardamos resultados anteriores
+saveRDS(mutations_filter4_patCpG_notABC,"~/vlad/TFM_bioinf/RESULTS/mutations_filter4_patCpG_notABC.rds")
+#mutations_filter4_patCpG_notABC <- readRDS("~/vlad/TFM_bioinf/RESULTS/mutations_filter4_patCpG_notABC.rds")
+
+
+
+# Filtrar las filas de mutations_filter4_patCpG_notABC que tienen nombres coincidentes
+mutations_filter4_patCpG_notABC2 <- mutations_filter4_patCpG_notABC[substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 16) %in% matching_names, ]
+
+
+dim(mutations_filter4_patCpG_notABC2)
+dim(mutations_filter3_patCpG)
+```
+[1] 41789   142
+[1] 43020   142
+
+####>*mutations_filter4_patCpG_notABC2*
+
+
+
+
+
+
+
+###**Más de una muestra**
+*Filtrar el data frame para excluir las filas que corresponden a muestras metastásicas y de tejido normal*
+```{}
+# Eliminamos las muestras con esas secuencias de caracteres
+expr_filter <- firehose_brca_expr[!grepl("-06A-|-11A-|-11B-", rownames(firehose_brca_expr)),]
+```
+
+> nrow(expr_filter)
+[1] 1093
+>table(sapply(rownames(expr_filter), function(x) strsplit(x, "-")[[1]][4]))
+ 01A  01B 
+1079   14
+
+............eliminar muestras A de los pacientes que tengan muestras B.!!!!!!!!!!!!!!!!!!!!!!!!!!
+*********************ya se hizo con los pacientes en el apartado anterior. No debería de afectar en pasos posteriores.
+
+
+**********************
+**********************************************
+
+
+
+
+
+
+> rownames(expr_filter90)[1]
+[1] "TCGA-3C-AAAU-01A"
+> substr(mutpatients, 1, 16)[1]
+[1] "TCGA-BH-A0DG-01A"
+
+> sum(!unique(substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16)) %in% substr(rownames(expr_filter90), 1, 16))
+[1] 8
+
+sum cuenta el número de elementos TRUE en el vector lógico invertido, que corresponde al número de valores únicos en los primeros 16 caracteres de Tumor_Sample_Barcode que no están presentes en los primeros 16 caracteres de los nombres de fila de expr_filter90.
+
+
+> sum(!substr(rownames(expr_filter90), 1, 16) %in% unique(substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16)))
+[1] 432
+
+sum cuenta el número de elementos TRUE en el vector lógico invertido, que corresponde al número de los primeros 16 caracteres de los nombres de fila de expr_filter90 que no están presentes entre los valores únicos de los primeros 16 caracteres de Tumor_Sample_Barcode.
+
+
+
+...................Pacientes mutations_filter4_patCpG_notABC2 en diferentes datasets:
+
+> length(unique(substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16)))
+[1] 669
+
+> length(intersect(substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16), substr(rownames(mediasCpG_genes), 1, 16)))
+[1] 669
+
+> length(intersect(substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16), substr(rownames(expr_filter90), 1, 16)))
+[1] 661 ......................................coinciden estos pacientes en los datasets
+
+> length(intersect(substr(rownames(expr_filter90), 1, 16), substr(rownames(mediasCpG_genes), 1, 16)))
+[1] 779
+
+Selec mutations_filter4_patCpG_notABC2 in expr_filter90
+```{r}
+mutations_filter4_patCpG_notABC3 <- subset(mutations_filter4_patCpG_notABC2, substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16) %in% substr(rownames(expr_filter90), 1, 16))
+
+dim(mutations_filter4_patCpG_notABC2)
+dim(mutations_filter4_patCpG_notABC3)
+View(head(mutations_filter4_patCpG_notABC3))
+```
+> length(unique(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16)))
+[1] 661
+
+> length(intersect(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16), substr(rownames(mediasCpG_genes), 1, 16)))
+[1] 661
+....................... todos los pacientes de mutations_filter4_patCpG_notABC3 estan en el dataset mediasCpG_genes y en el dataset expr_filter90 
+
+##>*mutations_filter4_patCpG_notABC3*
+
+
+
+
+# **Buscar NA en expr_filter90 y mediasCpG_genes**
+
+expr_filter90
+> sum(apply(expr_filter90, MARGIN = 1, FUN = function(x) any(is.na(x))))
+[1] 0
+
+
+
+
+#**Comprobamos genes en mediasCpG**
+
+g.........comprobar g en *mediasCpG_genesMut*
+genelist152_notNA
+
+> length(intersect(colnames(mediasCpG_genesMut), rownames(matrizSelecFold_sin_na)))
+[1] 152
+
+
+
+g2......comprobar g2 en mediasCpG_genes
+genelist490_notNA
+
+> length(intersect(colnames(mediasCpG_genes), genelist490_notNA))
+[1] 480
+
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+
+
+---
+
+
+#**3. Determine cutoff points**
+
+##**Graphing**
+
+plot(sort(rowMeans(mediasCpG_genes[which(grepl("nombregen"cpgAnno$UCSC_RefGene_Name)),])),ylim-c(0,1))
+
+plot(sort(mediasCpG_genes,])),ylim-c(0,1))
+
+
+*Cada linea representa un gen. En cada linea los pacientes estan ordenados de menor a mayor nivel de metilación para ese gen.*
+
+lineas multicolor
+```{r}
+# lineas multicolor
+matplot(apply(mediasCpG_genes[,1:45], 2, sort), type = "l", ylim = c(0, 1), xlab = "Pacients", ylab = "Metilation valuesD")
+```
+Una linea para un gen y punto de corte 0.33
+```{r}
+# Una linea para un gen y punto de corte 0.33
+plot(sort(mediasCpG_genes[, 1]), type = "l", ylim = c(0, 1), xlab = "Pacientes", ylab = "Valores")
+abline(h=0.33)
+```
+
+
+all patients with out col_NA_table
+```{r}
+#all patients with out col_NA_table
+matplot(apply((mediasCpG_genes[, !(colnames(mediasCpG_genes) %in% col_NA_table)]), 2, function(x) sort(x)[seq(1, length(x), by = 1)]), type = "l", pch = 1, cex = 0.5, ylim = c(0, 1), xlab = "Patients", ylab = "Metilation beta values")
+```
+
+
+densityPlot don´t work whit NA columns. Don´t include NA columns (col_NA_table).
+```{r}
+col_NA_table # List NA genes and no 
+
+densityPlot(mediasCpG_genes[,1:2])
+
+matplot(apply(mediasCpG_genes[,1:2], 2, sort), type = "l", ylim = c(0, 1), xlab = "Pacientes", ylab = "Valores")
+```
+
+.............................Matplot
+El matplot representa los genes graficando en cada linea (eje x) un gen con sus CpG ordenados de menor a mayor y en el (eje y) la densidad de datos para cada valor.
+
+............................Densityplot
+En el contexto de un gráfico de densidad generado por densityPlot(mediasCpG_genes), el valor en el eje X representa valores absolutos de metilación. El eje x representa los valores de las medias de metilación. El eje y representa la cantidad de valores en un beta value determinado (la densidad de probabilidad normalizada de esos valores de metilación.). Por ejemplo, en el eje x 0.8 tenemos un valor de 15 (Density).
+
+
+En el eje y, se representan los genes, y cada línea o área en el gráfico muestra la densidad de pacientes/medias CpG en función de sus niveles de metilación. Las áreas más densas indican dónde se concentran los valores de metilación y, por ende, dónde se encuentra la mayor proporción de pacientes/medias CpG.
+
+En resumen, el density plot proporciona una representación visual de la distribución de la metilación en el grupo de genes, permitiendo identificar patrones, tendencias o subgrupos en función de sus perfiles de metilación.
+
+
+
+
+Si mediasCpG_genes tiene los pacientes en las filas y los genes en las columnas, y utilizas densityPlot(mediasCpG_genes), cada línea en el gráfico de densidad representará la distribución de los valores de metilación para cada gen específico.
+Eje X (Valores de Metilación): Representa los valores de metilación para cada gen, en una escala de 0 a 1.
+Eje Y (Densidad de Probabilidad): Muestra la densidad de probabilidad de esos valores de metilación para cada gen específico.
+Cada línea en el gráfico de densidad corresponde a un gen diferente, permitiéndote visualizar y comparar las distribuciones de metilación entre los genes en tu conjunto de datos.
+
+
+
+Cada línea representa la densidad de probabilidad de las medidas de metilación de un gen específico a través de los 895 pacientes ó medias CpG.
+Si comparas diferentes picos en tu gráfico de densidad, un pico más alto indica que los valores correspondientes en el eje X son más frecuentes en comparación con picos más bajos.
+
+
+
+
+
+
+------------------------------- TRANSPUESTA:
+
+*generando un gráfico de densidad para cada columna de la matriz mediasCpG_genes después de transponerla.*
+
+Después de tranponer, el gráfico de densidad mostrará cómo se distribuyen las medidas de metilación de los diferentes pacientes a lo largo de su rango de valores y cuán frecuentemente ocurren esos valores.
+
+
+Si t(mediasCpG_genes) tiene los pacientes en las columnas y los genes en las filas, y utilizas densityPlot(mediasCpG_genes), cada línea en el gráfico de densidad representará la distribución de los valores de metilación para cada paciente. Esto es porque densityPlot aplicará la función de densidad a cada columna de la matriz, y como cada columna corresponde a un paciente, estarás visualizando la densidad de metilación para cada paciente.
+
+
+en el gráfico generado por densityPlot(mediasCpG_genes), el número de genes no está representado directamente en las líneas visibles del gráfico de densidad. Aquí te explico por qué:
+
+Eje X: Valores de metilación, típicamente en una escala de 0 a 1.
+Eje Y: Densidad de probabilidad de los valores de metilación para cada paciente, probabilidad de esos valores de metilación.
+Cada línea en el gráfico representará la distribución de los valores de metilación de un paciente específico, mostrando qué valores de metilación son más comunes para cada paciente.
+
+Líneas en el Gráfico:
+Cada línea en el gráfico de densidad representa la distribución de valores de metilación para un paciente específico.
+El número de líneas corresponde al número de pacientes (número de columnas en t(mediasCpG_genes)).
+
+Ausencia de Representación de Genes:
+Los genes (que están en las filas de mediasCpG_genes) no están directamente representados en las líneas visibles del gráfico. Cada línea de densidad simplemente muestra cómo se distribuyen los valores de metilación para cada paciente, independientemente del gen específico.
+
+
+
+*******************************************************
+Transpuesta (t(mediasCpG_genes)):
+Eje X: Valores de metilación de los pacientes.
+Eje Y: Densidad de probabilidad de las medidas de metilación.
+Cada línea: Representa un paciente específico.
+
+Sin transponer (mediasCpG_genes):
+Eje X: Valores de metilación de los genes.
+Eje Y: Densidad de probabilidad de las medidas de metilación.
+Cada línea: Representa un gen específico.
+
+********************************************************
+
+dim(mediasCpG_genes)
+[1] 895 490
+895 pacientes
+490 genes
+
+```{r}
+densityPlot(t(mediasCpG_genes[1:2,]))
+```
+
+
+*La matriz transpuesta nos proporciona un gráfico similar al matplot, con los pacientes en el eje x y la densidad de valores de metilación en el eje y. Cada linea representa un gen.*
+
+*La matriz transpuesta del densityPlot representa en el eje x el número de pacientes sobre aproximadamente 1 (beta value). En el y representa la densidad de los valores de metilación Cada linea representa un gen. Por ejemplo, en el 0.4 tendremos este porcentaje de pacientes con sus respectivos valores de metilación del conjunto de pacientes para ese gen.*
+```{r}
+# Generate density grafic whitout NA colums
+# Cada linea representa un paciente. A lo largo del eje horizontal se representa el valor de metilación de cada gen para un paciente.
+densityPlot(mediasCpG_genes[, !(colnames(mediasCpG_genes) %in% col_NA_table)])
+
+# Cada linea representa un gen. A lo largo del eje horizontal se representa el valor de metilación de cada gen en el total de pacientes.
+densityPlot(t(mediasCpG_genes[, !(colnames(mediasCpG_genes) %in% col_NA_table)]))
+```
+
+
+```{r}
+# Suponiendo que ya has cargado y preparado tus datos
+densityPlot(t(mediasCpG_genes[, !(colnames(mediasCpG_genes) %in% col_NA_table)]))
+
+# Agregar líneas verticales en 0.5, 0.33 y 0.66
+abline(v = 0.5, col = "red", lwd = 2, lty = 2)  # Línea roja discontinua en 0.5
+abline(v = 0.33, col = "black", lwd = 2, lty = 2) # Línea azul discontinua en 0.33
+abline(v = 0.66, col = "black", lwd = 2, lty = 2) # Línea verde discontinua en 0.66
+
+```
+
+En el eje y, se representa la densidad de valores para diferentes niveles de  metilación, y cada línea o área en el gráfico muestra la densidad de valores (medias de metilación de pacientes) en función de sus niveles de metilación. Las áreas más densas indican dónde se concentran los valores de metilación y, por ende, dónde se encuentra la mayor proporción valores de metilación de pacientes.
+
+
+
+
+
+
+En "densityPlot(t(mediasCpG_genes" observamos como entre el 0.33-0.66 encontramos la mayor parte de valores de metilación
+
+
+
+# **4. Build metil groups and compare**
+clasificar los pacientes wt/mut para cada gen, según el nivel de metilación
+*En cada gen mutado que tenga valores significativos para foldchange y pvalor, crear grupos con los pacientes wt y mut (genes mut) según la metilación (baja, media, alta) para los genes transcritos, y comparar las diferencias de expresión de cada grupo mediante p-valor y foldchanges. Eliminar los genes que no tengan p-valor y foldchange significativo.*
+
+1. Eliminamos genes que no estan presentes o son NA en el dataset de medias metilación.
+
+2. Características bucle:
+
+Tenemos que formar los grupos wt/mut en cada gen, utilizando solo los valores significativos para p-val y FoldChange. Para cada grupo clasificaremos los pacientes según sus valores de metilación en low/med/high, utilizando los valores de las medias de metilación.
+
+- Listado genes sd: genelist490 - col_NA_table ó también
+colnames(mediasCpG_genes) - col_NA_table
+- Listado genes mut: rownames(matrizSelecFold_sin_na)
+
+- Grupos wt/mut; Utilizamos grupos de pacientes mut/wt que hicimos previamente (usamos las mismas funciones.)
+
+- Datos p-val: matrizSelecPval_sin_na
+- Datos foldChanges: matrizSelecFold_sin_na
+- Datos medias metilación genes/pacientes: mediasCpG_genes
+
+- Valores de interés para foldchange y p-val:
+
+ # Creamos matriz receptora
+matrizSelecFold <- matrix(NA, nrow = nrow(matFoldC_OrdHeatmap), ncol = ncol(matFoldC_OrdHeatmap), dimnames = list(rownames(matFoldC_OrdHeatmap), colnames(matFoldC_OrdHeatmap)))
+
+ # Creamos condición
+condicion <- (matFoldC_OrdHeatmap < -log2(1.5) | matFoldC_OrdHeatmap > log2(1.5)) & matPval_OrdHeatmap < 0.1
+ # Añadimos datos de interés a matriz creada
+matrizSelecFold[condicion] <- matFoldC_OrdHeatmap[condicion]
+
+
+- Metodología:
+Par un gen: 
+
+  - Comprobamos si se cumplen las condiciones en los df para p-val y foldchanges.
+  - Obtenemos pacientes wt y mut.
+  - Clasificamos pacientes según su estado de metilación
+  - Comprobamos significancia entre grupos wt y mut, de forma independiente para los tres niveles de metilación. Solo conservamos aquellos que sean significativos en uno o dos grupos.
+  
+
+dim(matrizSelecPval_sin_na)
+dim(matrizSelecFold_sin_na)
+[1] 152 490
+[1] 152 490
+
+Del apartado anterior:
+Delete names of vector genelist490 that are in vector col_NA_table.
+```{}
+# genelist490 - col_NA_table
+# colnames(mediasCpG_genes) = genelist490
+
+ 
+genelist490_notNA <- genelist490[!genelist490 %in% col_NA_table]
+length(genelist490_notNA)
+length(genelist490)
+```
+
+
+
+#**4.2.- Previous**
+by genetic expresion in boxplot
+*entre los grupos wt/mut de cada uno de los niveles de metilación.*
+*Finalmente se usó la matriz del 4.3 que se filtró por separado para GenesMut y GenesSD*
+
+1. Añadir al dataset 3 columnas con los p-valor de la comparación de expresión entre los wt y mut para los diferentes niveles de metilación. También 3 columnas más con los respectivos foldchanges. Solo utilizaremos los niveles de metilación que tengan 5 pacientes o más en al menos dos de los niveles de metilación de los pacientes con mutaciónes.
+
+Con los p-valor y foldchanges para la comparación de la expresión de los pacientes wt y mut para los diferentes niveles de metilación, podremos saber si para un mismo nivel de metilación existen diferencias significativas en la expresión génica debido únicamente a las mutaciones. Posteriormente podremos comparar la expresión entre diferentes niveles de metilación calculando el p-valor y foldchanges entre los diferentes niveles de metilación.
+
+2. Crear una nueva matriz con los grupos de pacientes clasificados según los valores de metilación del GenMut (al igual que en las comparaciones anteriores, se tendrá en cuenta la expresión del GenSD). Esta matriz contendrá 6 columnas con los 3 niveles de metilación para pacientes wt y mut. La estructura de la matriz debe de ser la misma que para las matrices de metilación que combinan dos genes, por lo que todas las filas para un mismo GenMut tedrán el mismo resultado para el número de pacientes por grupo. 
+
+Esta nueva matriz nos permitirá saber si la metilación de los GenMut tiene impacto en la expresión génica de los genes transcritos (entre los pacientes mut y wt).
+
+*Además de obtener la matriz con los pvalores y FC de los tres niveles de metilación, incluiremos paralelamente una matriz similar para calcular la expresión, pval y FC de cada gen transcrito, conforme a los grupos de pacientes según los valores de metilación del propio genMut. De este modo los valores para el número de pacientes de cada nivel de metilación serán iguales en cada commbinación de ese gen mutado con el gen transcrito correspondiente, pero los datos derivados de la expresión serán diferentes al ser la expresión de diferentes genes la que se tiene en cuenta (pacientes genMut ordenados según nivel metilación y valores de expresión del gen transcrito correspondiente).*
+
+*Para esto, tendría que probar dos grupos de muestras, nuevamente usando una prueba t (pero sin ajuste para pruebas múltiples). Si las tres pruebas siguen siendo significativas (y tienen cambios de pliegue respectivos), este par de mutación-expresión no se ve afectado por las diferencias de metilación y, por lo tanto, no es de mayor interés para nosotros. Entonces, lo que queremos detectar son pares de mutación-expresión que tengan diferencias significativas solo en uno o dos de los subgrupos, pero no en todos. Dichos candidatos no solo deben identificarse por diferencias de valor p, sino también en función de los respectivos cambios de pliegue.*
+
+*Necesitamos al menos dos grupos con más de 5 pacientes y diferencias significativas en uno de ellos. De este modo podremos afirmar que las diferencias de expresión entre pacientes mut y wt en los diferentes niveles de metilación, se deben a las diferencias de metilación y no a las mutaciones, ya que el gen que en un nivel de metilación no tenga diferencias significativas entre wt y mut, pero si las tenga en otro nivel de metilación, debería de tener estas diferencias significativas solo como consecuencia del nivel de metilación. Si hay diferencias significativas en todos los grupos, estas se deberían a las mutaciones. El nivel de metilación puede afectar de forma diferente a los distintos genes.*
+
+
+
+**Obtenemos p-valor y foldchanges**
+
+1º Creamos columna boleana para definir aquellas combinaciones de genes que tengan 5 pacientes o más en al menos dos de los niveles de metilación de los pacientes con mutaciónes.
+
+2º Para las combinaciones seleccionadas calculamos p-valor y foldchanges de la expresión, para cada uno de los niveles de metilación. Crearemos las nuevas columnas con valores NA.
+
+3º Comparamos p-valor y foldchanges dentro de los niveles de metilación para wt y mut.
+
+
+*p-valor/foldchanges for metilation levels*
+Para las combinaciones de genes seleccionadas (TRUE) calculamos p-valor y foldchanges de la expresión, para cada uno de los niveles de metilación. Crearemos las nuevas columnas con valores NA.
+
+> colnames(MatrixList_total_notNA)
+[1] "wt_low"      "wt_med"      "wt_high"     "mut_low"     "mut_med"     "mut_high"    "pat5Groups2"
+
+Para el dataframe DF_total_notNA, que tiene las columnas ("wt_low", "wt_med"      "wt_high", "mut_low", "mut_med"), en las filas con valor TRUE en la columna "pat5Groups2" calcular el p-valor y el foldchange de los valores de expresión génica, de los grupos de pacientes wt/mut para cada nivel de metilación. Para las filas FALSE dejar los valores como NA.
+
+
+
+
+
+
+
+
+#**4.3.- Compare groups GenSD + GenMut**
+*TOTAL nºpat,p-val,FC+ g1Met*
+
+*Incluiremos los valores de metilación para los genes mut (g) según los tres niveles establecidos*
+
+
+#--------------------------------------------------------
+#--------**Getting gene mut methylation points**
+
+
+
+###**Preparing matrix**
+
+> length(rownames(matrizSelecFold_sin_na))
+[1] 152
+
+```{r}
+genelist152 <- rownames(matrizSelecFold_sin_na)
+
+matrixMutCpG <- matrix(NA, nrow=length(rownames(Patients_valCpG.sub)), ncol=length(genelist152))
+rownames(matrixMutCpG) <- rownames(Patients_valCpG.sub)  
+colnames(matrixMutCpG) <- genelist152
+```
+> dim(matrixMutCpG)
+[1] 895 152
+
+###**Iterating**
+*para obtener la media de metilación para cada gen de cada paciente*
+```{r}
+# head(genelist490)
+# gene <- genelist490[3]
+
+#Seleccionamos valores cpgs para cada gen
+for (gene in genelist152){
+cpgs <- unique(c(which(grepl(paste("^",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste("^",gene,";",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste(";",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name))))
+if(length(cpgs) == 1)   { #Si tiene solo 1 valor, colMeans solo trabaja con más de un valor
+   matrixMutCpG[,gene] <- Patients_valCpG.sub[ ,cpgs] #Selecciona indices columnas con el mismo nombre.
+ } else{ #colMeans solo trabaja con más de un valor
+   matrixMutCpG[,gene] <- rowMeans(Patients_valCpG.sub[,cpgs],na.rm = TRUE)
+ }
+}
+
+View(matrixMutCpG[1:10,])
+#View(as.matrix(cpgAnno[cpgs,]))
+
+mediasCpG_genesMut <- matrixMutCpG
+#saveRDS(table,"~/vlad/TFM_bioinf/RESULTS/mediasCpG_genes.rds")
+#mediasCpG_genes <- readRDS("~/vlad/TFM_bioinf/RESULTS/mediasCpG_genes.rds")
+```
+####>*mediasCpG_genesMut*
+
+
+###**Checking genes NA**
+Comprobamos el número total de columnas con todos los valores Na en el nuevo dataset con medias de metilación (mediasCpG_genesMut).
+
+```{r}
+col_NA_mediasCpG_genesMut <- colnames(mediasCpG_genesMut)[colSums(is.na(mediasCpG_genesMut)) == nrow(mediasCpG_genesMut)]
+
+col_NA_mediasCpG_genesMut
+```
+
+```{r}
+#Get CpGs in Patients_valCpG.sub whit all yours values NA
+col_NA_total <- colnames(Patients_valCpG.sub)[colSums(is.na(Patients_valCpG.sub)) == nrow(Patients_valCpG.sub)]
+length(col_NA_total)
+```
+> length(col_NA_total)
+[1] 64147
+
+> length(colnames(Patients_valCpG.sub))
+[1] 485512
+
+
+
+Vector lógico con la coincidencias
+```{}
+genes_found <- unlist(lapply(col_NA_mediasCpG_genesMut, function(gene) {
+  any(c(grepl(paste("^", gene, "$", sep = ""), dat.cpgAnno_ord$UCSC_RefGene_Name),
+         grepl(paste("^", gene, ";", sep = ""), dat.cpgAnno_ord$UCSC_RefGene_Name),
+         grepl(paste(";", gene, "$", sep = ""), dat.cpgAnno_ord$UCSC_RefGene_Name)))
+}))
+```
+[1] FALSE FALSE FALSE FALSE FALSE FALSE FALSE
+
+
+```{r}
+#gene <- "CYP21A2"
+#gene <- genelist490
+
+# Obtenemos cpgs del gen
+for (gene in col_NA_mediasCpG_genesMut){
+  
+  cpgs <- unique(c(which(grepl(paste("^",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste("^",gene,";",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name)),
+          which(grepl(paste(";",gene,"$",sep=""),dat.cpgAnno_ord$UCSC_RefGene_Name))))
+  
+  
+  cat("\n Results for gen", gene, ":\n")
+  # Obtenemos los nombres de los cpgs
+  cpgs_names <- rownames(dat.cpgAnno_ord)[cpgs]
+  #length(cpgs_names)
+  cat(length(cpgs_names), "Total CpGs","\n")
+  
+  # Obtenemos los CpG del gen que tienen todos los valores NA. 
+  col_NA_cpgs <- col_NA_total[col_NA_total %in% cpgs_names]
+  #col_NA_cpgs
+  #length(col_NA_cpgs)
+  cat(length(col_NA_cpgs), "CpGs whit all values NA","\n")
+  
+
+  #Obtenemos CpG que tienen algún valor no NA.
+  col_no_NA_cpgs <- setdiff(cpgs_names, col_NA_cpgs)
+  #col_no_NA_cpgs
+cat(length(col_no_NA_cpgs), "CpGs whit some value not NA ","\n")
+  
+}
+
+#(Patients_valCpG.sub[, cpgs_names])
+```
+
+7 genes (col_NA_mediasCpG_genesMut) are not in cpgAnno.
+
+
+
+Delete names of vector genelist152 that are in vector col_NA_table.
+```{r}
+# genelist490 - col_NA_table
+# colnames(mediasCpG_genes) = genelist490
+
+ 
+genelist152_notNA <- genelist152[!genelist152 %in% col_NA_mediasCpG_genesMut]
+length(genelist152_notNA)
+length(genelist152)
+```
+####>*genelist152_notNA*
+
+
+
+### **DENSITY plot Mut Genes**
+
+```{r}
+# Generate density grafic whitout NA colums
+# Cada linea representa un paciente. A lo largo del eje horizontal se representa el valor de metilación de cada gen para un paciente.
+densityPlot(mediasCpG_genesMut[, !(colnames(mediasCpG_genesMut) %in% col_NA_table)])
+
+# Cada linea representa un gen. A lo largo del eje horizontal se representa el valor de metilación de cada gen en el total de pacientes.
+densityPlot(t(mediasCpG_genesMut[, !(colnames(mediasCpG_genesMut) %in% col_NA_table)]))
+
+
+densityPlot(t(mediasCpG_genesMut))
+```
+Representamos los genes graficando en cada linea (eje x) un gen con sus CpG ordenados de menor a mayor y en el eje y la densidad de datos para cada valor.
+
+
+
+
+```{r}
+# Suponiendo que ya has cargado y preparado tus datos
+densityPlot(t(mediasCpG_genesMut))
+
+# Agregar líneas verticales en 0.5, 0.33 y 0.66
+abline(v = 0.5, col = "red", lwd = 2, lty = 2)  # Línea roja discontinua en 0.5
+abline(v = 0.33, col = "black", lwd = 2, lty = 2) # Línea azul discontinua en 0.33
+abline(v = 0.66, col = "black", lwd = 2, lty = 2) # Línea verde discontinua en 0.66
+```
+
+
+
+##--------
+##--------------------------------------------------------
+
+
+
+
+#**Previous steps: Bucle genelist490_notNA-genelist152_notNA**
+
+
+```{r}
+# names <- c("wt_low", "wt_med", "wt_high", "mut_low", "mut_med", "mut_high", "pval_low", "pval_med", "pval_high", "FC_low", "FC_med", "FC_high")
+# prefixed_names <- paste0("g_", names)
+```
+
+Obtendremos tanto para GenesMut como GenesSD 13 columnas (12+1):
+Debemos de obtener 12 columnas al igual que en el dataset de genes transcritos: "g_wt_low", "g_wt_med", "g_wt_high", "g_mut_low", "g_mut_med", "g_mut_high", "g_pval_low", "g_pval_med", "g_pval_high", "g_FC_low", "g_FC_med", "g_FC_high"
+
+La diferencia en las columnas para los genes mutados, será que no tendremos en cuenta los genes transcritos, si no los valores de los propios genes mutados.
+
+###**Bucle Índices corregidos**
+```{r}
+# Inicializar la lista para almacenar matrices de cada gen
+numPatLevelMatrixList <- list()
+
+# Crear matriz con todos los genes 'g2' y grupos de metilación para cada gen 'g'
+numPatLevelMatrix <- matrix(ncol = 24, nrow = length(genelist490_notNA))
+colnames(numPatLevelMatrix) <- c("wt_low", "wt_med", "wt_high", "mut_low", "mut_med", "mut_high", "pval_low", "pval_med", "pval_high", "FC_low", "FC_med", "FC_high","g_wt_low", "g_wt_med", "g_wt_high", "g_mut_low", "g_mut_med", "g_mut_high", "g_pval_low", "g_pval_med", "g_pval_high", "g_FC_low", "g_FC_med", "g_FC_high")
+rownames(numPatLevelMatrix) <- genelist490_notNA
+
+# Loop sobre todos los genes 'g'
+for (g in rownames(matrizSelecFold_sin_na)) { 
+  #print(paste(g, "Gen bucle 1"))
+  # Create a copy matrix for this gene
+  genMatrix <- numPatLevelMatrix
+  
+  for (g2 in rownames(genMatrix)) {
+    #print(paste(g2))
+    # Aplicar la condición para determinar si los genes 'g2' deben ser usados.
+    condition <- (matFoldC_OrdHeatmap[g, g2] < -log2(1.5) || matFoldC_OrdHeatmap[g, g2] > log2(1.5)) && matPval_OrdHeatmap[g, g2] < 0.1
+    
+    if (!condition) {
+      next  # Pasar a la siguiente iteración del bucle si la condición no se cumple
+    }
+    
+    # Crear los grupos mut/wt
+    mutpatients <- getMutatedPatients(g, mutations_filter2)
+    wtpatients <- getWildtypePatients(g, mutations_filter2)
+    
+    
+    #############################################################################
+    ######################## Transcribed Genes###################################
+    
+    # Metilación for patients mut y wt in genes transcribed
+    
+    # Patients (3 first elements) and metilation
+    metil_MutPatients <- mediasCpG_genes[sapply(strsplit(rownames(mediasCpG_genes), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% mutpatients, g2]
+    metil_WtPatients <- mediasCpG_genes[sapply(strsplit(rownames(mediasCpG_genes), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% wtpatients, g2]
+    
+    
+    # Selectión by tumoral tissue -01A-
+    metil_MutPatients <- metil_MutPatients[grepl("-01A-", names(metil_MutPatients))]
+    metil_WtPatients <- metil_WtPatients[grepl("-01A-", names(metil_WtPatients))]
+    
+    # Clasificación de metilación ########(PATIENTS GROUPS BY METILATION LEVEL)#########
+    metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+    metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+
+    metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+    metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+
+    metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+    metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+
+    # Contar los pacientes en cada grupo de metilación y añadir a la matriz
+    genMatrix[g2, 1:6] <- c(length(metil_WtPatients_low), length(metil_WtPatients_med), length(metil_WtPatients_high), length(metil_MutPatients_low), length(metil_MutPatients_med), length(metil_MutPatients_high))
+    
+    # Calculate foldchanges and pvalues for metilation levels
+    for (metil_level in c("low", "med", "high")) {
+      # Get the expression data for the mutation and wild type groups
+      
+# Test USING 16 characters:
+#exprOfMutPatients<-log2(expr_filter90[substr(names(metil_MutPatients_low),1, 16), g2] + 1)
+#exprOfMutPatients<-log2(expr_filter90[substr(names(metil_WtPatients_low), 1, 16), g2] + 1)
+
+# USING 16 characters whit paste0 name:      
+# metil_level <- "low"   
+      exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), g2] + 1)
+      exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), g2] + 1)
+
+
+
+      # Check if expression data for the gene in the patient groups and if the data are numeric
+      
+      #!is.numeric(exprOfMutPatients) || !is.numeric(exprOfWtPatients) ||
+      
+      if (length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2) {
+        # If there are no data or data is non-numeric, assign NA to the p and fold change values. Introducimos estas lineas porque no coinciden todos los pacientes del dataset de valores CpG con el los mut y genes transcritos.Los valores NA en R se consideran numéricos.La función t.test() necesita al menos dos observaciones válidas (no NA) en cada vector para poder realizar el cálculo.
+        genMatrix[g2, paste0("FC_", metil_level)] <- NA
+        genMatrix[g2, paste0("pval_", metil_level)] <- NA
+      } else {
+        # If there are data, calculate the fold change and the p value
+          average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+          average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+          foldchange <- (average_1 - average_2)
+
+          # Calculate pvalue
+          pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+  
+          # Assign the foldchange and pvalue to the matrix
+          genMatrix[g2, paste0("FC_", metil_level)] <- foldchange
+          genMatrix[g2, paste0("pval_", metil_level)] <- pvalue
+      }
+     }
+      
+      
+    ##########################################################################
+    ######################## Mutated Genes ###################################
+    
+    #print(paste(g, "Gen mut"))  
+    
+      # Comprobar si 'g' existe en mediasCpG_genesMut
+    if (!g %in% colnames(mediasCpG_genesMut)) {
+      # Si no existe, asigna NA a los valores correspondientes en genMatrix y pasa a la siguiente iteración del bucle
+      for (metil_level in c("low", "med", "high")) {
+        genMatrix[g2, paste0("g_FC_", metil_level)] <- NA
+        genMatrix[g2, paste0("g_pval_", metil_level)] <- NA
+      }
+      next
+    }
+    
+    # Metilación for patients mut and wt in genes mut
+    metil_MutPatients <- mediasCpG_genesMut[sapply(strsplit(rownames(mediasCpG_genesMut), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% mutpatients, g]
+    metil_WtPatients <- mediasCpG_genesMut[sapply(strsplit(rownames(mediasCpG_genesMut), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% wtpatients, g]
+
+    
+    # Selectión by -01A-
+    metil_MutPatients <- metil_MutPatients[grepl("-01A-", names(metil_MutPatients))]
+    metil_WtPatients <- metil_WtPatients[grepl("-01A-", names(metil_WtPatients))]
+    
+    
+    # Clasification (PATIENTS GROUPS BY METILATION LEVEL)#########
+    metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+    metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+
+    metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+    metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+
+    metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+    metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+
+    # Contar los pacientes en cada grupo de metilación y añadir a la matriz
+    genMatrix[g2, 13:18] <- c(length(metil_WtPatients_low), length(metil_WtPatients_med), length(metil_WtPatients_high), length(metil_MutPatients_low), length(metil_MutPatients_med), length(metil_MutPatients_high))
+    
+    
+    #exprOfWtPatients <- log2(expr_filter90[names(metil_WtPatients_low), g2] + 1)
+    
+    
+    # Calculate foldchanges and pvalues for metilation levels
+    for (metil_level in c("low", "med", "high")) {
+      
+      # USING 16 characters whit paste0 name:      
+# metil_level <- "low"   
+      exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), g2] + 1)
+      exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), g2] + 1)
+      
+      # Check if expression data for the gene in the patient groups and if the data are numeric
+      if (length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2) {
+        # If there are no data or data is non-numeric, assign NA to the p and fold change values. Introducimos estas lineas porque no coinciden todos los pacientes del dataset de valores CpG con el los mut y genes transcritos.Los valores NA en R se consideran numéricos.La función t.test() necesita al menos dos observaciones válidas (no NA) en cada vector para poder realizar el cálculo.
+        genMatrix[g2, paste0("g_FC_", metil_level)] <- NA
+        genMatrix[g2, paste0("g_pval_", metil_level)] <- NA
+      } else {
+        # If there are data, calculate the fold change and the p value
+        average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+        average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+        foldchange <- (average_1-average_2)
+
+        # Calculate pvalue
+        pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+
+        # Assign the foldchange and pvalue to the matrix
+        genMatrix[g2, paste0("g_FC_", metil_level)] <- foldchange
+        genMatrix[g2, paste0("g_pval_", metil_level)] <- pvalue
+      }  
+    }
+  }
+  
+  
+  # Agregar la matriz de este gen a la lista
+  numPatLevelMatrixList[[g]] <- genMatrix
+}
+```
+### **Soluciones problemas código:**
+> exprOfMutPatients <- log2(expr_filter90[get(paste0("metil_MutPatients_", metil_level)), g2] + 1)  
+
+........está intentando utilizar los valores de cada nombre para buscar los nombres de las filas, necesitamos usar solo los nombres:
+
+expr_filter90[names(metil_MutPatients_low), g2] + 1
+
+> names(metil_MutPatients_low)
+[1] "TCGA-AR-A1AI-01A-11D-A12R-05"
+> length(intersect(rownames(mediasCpG_genesMut), rownames(expr_filter90)))
+[1] 0
+
+....... los nombres de las filas de ambos dataset no coinciden.
+
+
+> expr_filter90[names(metil_MutPatients_low), g2] + 1
+[1] NA
+> names(metil_MutPatients_low)
+[1] "TCGA-AR-A1AI-01A-11D-A12R-05"
+> length(intersect(rownames(mediasCpG_genesMut), rownames(expr_filter90)))
+[1] 0
+
+....... tenemos que seleccionar solo los 16 primeros carácteres
+
+> head(rownames(expr_filter90))
+[1] "TCGA-3C-AAAU-01A-11R-A41B-07" "TCGA-3C-AALI-01A-11R-A41B-07"  
+> length(intersect(substr(rownames(mediasCpG_genesMut), 1, 16), substr(rownames(expr_filter90), 1, 16)))
+[1] 779
+> length(rownames(mediasCpG_genesMut))
+[1] 895
+> length(substr(rownames(mediasCpG_genesMut), 1, 16))
+[1] 895
+
+......... además no todos los pacientes de mediasCpG_genes estan en expr_filter90.
+
+      names(substr(get(paste0("metil_MutPatients_", metil_level)), 1, 16))
+      
+> exprOfMutPatients <- log2(expr_filter90[names(substr(get(paste0("metil_MutPatients_", metil_level)), 1, 16)), g2] + 1) 
+
+> metil_level <- "low"
+> log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), g2] + 1)
+[1] 1.433921
+
+
+
+
+
+#**LOOP (MUT-SD)**
+*FC para wt/mut total y Null objetos*
+
+
+Creamos función con nuevo dataset mutations_filter4_patCpG_notABC3:
+```{r}
+# Función para obtener pacientes mutados para un gen
+getMutatedPatients <- function(gene, mutations_filter2) {
+  return(unique(mutations_filter2$Tumor_Sample_Barcode[which(mutations_filter2$Hugo_Symbol==gene)]))
+}
+
+# Función para obtener pacientes sin mutaciones para un gen
+allpatients <- unique(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode) # ..............change dataset to get all patients
+getWildtypePatients <- function(gene, mutations_filter2) {
+  return(setdiff(allpatients,unique(mutations_filter2$Tumor_Sample_Barcode[which(mutations_filter2$Hugo_Symbol==gene)])))
+}
+```
+
+
+**********************************************
+*Hecho para metilacion de G1 y G2*
+*************************************************
+*El bucle para seleccionar las combinaciones de genes para g1 y g2 está hecho en TFM6, donde también se procesan las matrices para obtener una sola. Después el los apartados "genSD metil groups" y "genMut metil groups" (TFM5 y TFM6 respectivamente) se procesan las matrices para obtener la selección de genes en cada caso. Por este motivo no se debe de tener en cuenta desde este apartado hasta genSD metil groups, donde se inicia el procesado con PvalFCmut_NoNA obtenido en TFM6.*
+
+
+Bucle con mutations_filter4_patCpG_notABC3 y función modificada:
+```{r}
+# Inicializar la lista para almacenar matrices de cada gen
+numPatLevelMatrixList <- list()
+
+# Crear matriz con todos los genes 'g2' y grupos de metilación para cada gen 'g'
+numPatLevelMatrix <- matrix(ncol = 26, nrow = length(genelist490_notNA))
+colnames(numPatLevelMatrix) <- c("wt_low", "wt_med", "wt_high", "mut_low", "mut_med", "mut_high", "pval_low", "pval_med", "pval_high", "FC_low", "FC_med", "FC_high","g_wt_low", "g_wt_med", "g_wt_high", "g_mut_low", "g_mut_med", "g_mut_high", "g_pval_low", "g_pval_med", "g_pval_high", "g_FC_low", "g_FC_med", "g_FC_high", "FC_All", "g_FC_All")
+rownames(numPatLevelMatrix) <- genelist490_notNA
+
+# Loop sobre todos los genes 'g'
+for (g in rownames(matrizSelecFold_sin_na)) { 
+  print(paste(g, "Gen bucle 1"))
+  # Create a copy matrix for this gene
+  genMatrix <- numPatLevelMatrix
+  
+  for (g2 in rownames(genMatrix)) {
+    #print(paste(g2))
+    # Aplicar la condición para determinar si los genes 'g2' deben ser usados.
+    condition <- (matFoldC_OrdHeatmap[g, g2] < -log2(1.5) || matFoldC_OrdHeatmap[g, g2] > log2(1.5)) && matPval_OrdHeatmap[g, g2] < 0.1
+    
+    if (!condition) {
+      next  # Pasar a la siguiente iteración del bucle si la condición no se cumple
+    }
+    
+    
+    
+    # # Crear los grupos mut/wt
+    # mutpatients <- getMutatedPatients(g, mutations_filter2)
+    # wtpatients <- getWildtypePatients(g, mutations_filter2)
+    
+    # Crear los grupos mut/wt CON mutations_filter4_patCpG_notABC
+    mutpatients <- getMutatedPatients(g, mutations_filter4_patCpG_notABC3)
+    wtpatients <- getWildtypePatients(g, mutations_filter4_patCpG_notABC3)
+    
+    
+    
+    
+    #############################################################################
+    ######################## Transcribed Genes ###################################
+    
+    allExprOfMutPatG2 <- NULL
+    allExprOfWtPatG2 <- NULL
+    foldchangesAll <- NULL
+
+
+
+    # Metilación for patients mut y wt in genes transcribed
+
+    metil_MutPatients <- mediasCpG_genes[substr(rownames(mediasCpG_genes), 1, 16) %in% substr(mutpatients, 1, 16), g2]
+    metil_WtPatients <- mediasCpG_genes[substr(rownames(mediasCpG_genes), 1, 16) %in% substr(wtpatients, 1, 16), g2]
+
+
+    # Eliminamos Na
+    # mi_vector_sin_na <- mi_vector[complete.cases(mi_vector)]
+    metil_MutPatients <- metil_MutPatients[complete.cases(metil_MutPatients)]
+    metil_WtPatients <- metil_WtPatients[complete.cases(metil_WtPatients)]
+
+
+    # Clasificación de metilación ########(PATIENTS GROUPS BY METILATION LEVEL)#########
+    metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+    metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+
+    metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+    metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+
+    metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+    metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+
+    # Contar los pacientes en cada grupo de metilación y añadir a la matriz
+    genMatrix[g2, 1:6] <- c(length(metil_WtPatients_low), length(metil_WtPatients_med), length(metil_WtPatients_high), length(metil_MutPatients_low), length(metil_MutPatients_med), length(metil_MutPatients_high))
+
+
+
+    # # Expresión de todos los pacientes mut/wt
+    allExprOfMutPatG2 <- log2(expr_filter90[substr(names(metil_MutPatients), 1, 16), g2] + 1)
+    allExprOfWtPatG2 <- log2(expr_filter90[substr(names(metil_WtPatients), 1, 16), g2] + 1)
+
+    foldchangesAll <- mean(allExprOfMutPatG2, na.rm = TRUE) - mean(allExprOfWtPatG2, na.rm = TRUE)
+    genMatrix[g2, "FC_All"] <- foldchangesAll
+
+
+
+
+    # Calculate foldchanges and pvalues for metilation levels
+    for (metil_level in c("low", "med", "high")) {
+      # Get the expression data for the mutation and wild type groups
+
+      # Reset the variables at the start of each loop iteration (para evitar que si no hay datos en un bucle se cojan los del bucle anterior)
+      exprOfMutPatients <- NULL
+      exprOfWtPatients <- NULL
+
+      exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), g2] + 1)
+      exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), g2] + 1)
+
+
+      if (any(is.na(exprOfMutPatients))) {print(paste("Hay valores NA en exprOfMutPatients en metil_level", metil_level, "del gen", g2))}
+      if (any(is.na(exprOfWtPatients))) {print(paste("Hay valores NA en exprOfWtPatients en metil_level", metil_level, "del gen", g2))}
+
+
+      # Check if expression data for the gene in the patient groups and if the data are numeric
+
+      #!is.numeric(exprOfMutPatients) || !is.numeric(exprOfWtPatients) ||
+
+      if (length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2) {
+        # If there are no data or data is non-numeric, assign NA to the p and fold change values. Introducimos estas lineas porque no coinciden todos los pacientes del dataset de valores CpG con el los mut y genes transcritos.Los valores NA en R se consideran numéricos.La función t.test() necesita al menos dos observaciones válidas (no NA) en cada vector para poder realizar el cálculo.
+        genMatrix[g2, paste0("FC_", metil_level)] <- NA
+        genMatrix[g2, paste0("pval_", metil_level)] <- NA
+      } else {
+        # If there are data, calculate the fold change and the p value
+          average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+          average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+          foldchange <- (average_1 - average_2)
+
+
+
+          # Calculate pvalue
+          pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+
+          # Assign the foldchange and pvalue to the matrix
+          genMatrix[g2, paste0("FC_", metil_level)] <- foldchange
+          genMatrix[g2, paste0("pval_", metil_level)] <- pvalue
+      }
+    }
+
+      
+    ##########################################################################
+    ######################## Mutated Genes ###################################
+
+    #print(paste(g, "Gen mut"))
+
+    #   # Comprobar si 'g' existe en mediasCpG_genesMut
+    # if (!g %in% colnames(mediasCpG_genesMut)) {
+    #   # Si no existe, asigna NA a los valores correspondientes en genMatrix y pasa a la siguiente iteración del bucle
+    #   for (metil_level in c("low", "med", "high")) {
+    #     genMatrix[g2, paste0("g_FC_", metil_level)] <- NA
+    #     genMatrix[g2, paste0("g_pval_", metil_level)] <- NA
+    #   }
+    #   next
+    # }
+
+  
+    # # Metilación for patients mut and wt in genes mut
+    # metil_MutPatients <- mediasCpG_genesMut[sapply(strsplit(rownames(mediasCpG_genesMut), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% mutpatients, g]
+    # metil_WtPatients <- mediasCpG_genesMut[sapply(strsplit(rownames(mediasCpG_genesMut), "-"), function(x) {paste(x[1:3], collapse="-")}) %in% wtpatients, g]
+
+    
+    metil_MutPatients <- mediasCpG_genesMut[substr(rownames(mediasCpG_genesMut), 1, 16) %in% substr(mutpatients, 1, 16), g]
+    metil_WtPatients <- mediasCpG_genesMut[substr(rownames(mediasCpG_genesMut), 1, 16) %in% substr(wtpatients, 1, 16), g]
+
+    # # Selectión by -01A-
+    # metil_MutPatients <- metil_MutPatients[grepl("-01A-", names(metil_MutPatients))]
+    # metil_WtPatients <- metil_WtPatients[grepl("-01A-", names(metil_WtPatients))]
+
+    # Eliminamos Na
+    # mi_vector_sin_na <- mi_vector[complete.cases(mi_vector)]
+    metil_MutPatients <- metil_MutPatients[complete.cases(metil_MutPatients)]
+    metil_WtPatients <- metil_WtPatients[complete.cases(metil_WtPatients)]
+
+    # Clasification (PATIENTS GROUPS BY METILATION LEVEL)#########
+    metil_MutPatients_low <- metil_MutPatients[metil_MutPatients < 0.3333]
+    metil_WtPatients_low <- metil_WtPatients[metil_WtPatients < 0.3333]
+
+    metil_MutPatients_med <- metil_MutPatients[metil_MutPatients >= 0.3333 & metil_MutPatients <= 0.6667]
+    metil_WtPatients_med <- metil_WtPatients[metil_WtPatients >= 0.3333 & metil_WtPatients <= 0.6667]
+
+    metil_MutPatients_high <- metil_MutPatients[metil_MutPatients > 0.6667]
+    metil_WtPatients_high <- metil_WtPatients[metil_WtPatients > 0.6667]
+
+    # Contar los pacientes en cada grupo de metilación y añadir a la matriz
+    genMatrix[g2, 13:18] <- c(length(metil_WtPatients_low), length(metil_WtPatients_med), length(metil_WtPatients_high), length(metil_MutPatients_low), length(metil_MutPatients_med), length(metil_MutPatients_high))
+
+
+
+    # Espresión pacientes agrupados según metilación genMut
+    allExprOfMutPatG2 <- log2(expr_filter90[substr(names(metil_MutPatients), 1, 16), g2] + 1)
+    allExprOfWtPatG2 <- log2(expr_filter90[substr(names(metil_WtPatients), 1, 16), g2] + 1)
+    
+    foldchangesAll <- mean(allExprOfMutPatG2, na.rm = TRUE) - mean(allExprOfWtPatG2, na.rm = TRUE)
+    genMatrix[g2, "g_FC_All"] <- foldchangesAll
+    
+    
+
+    # Calculate foldchanges and pvalues for metilation levels
+    for (metil_level in c("low", "med", "high")) {
+
+      exprOfMutPatients <- NULL
+      exprOfWtPatients <- NULL
+      
+      
+      # USING 16 characters whit paste0 name:
+      # exprOfWtPatients <- log2(expr_filter90[names(metil_WtPatients_low), g2] + 1)
+      exprOfMutPatients <- log2(expr_filter90[substr(names(get(paste0("metil_MutPatients_", metil_level))), 1, 16), g2] + 1)
+      exprOfWtPatients <- log2(expr_filter90[substr(names(get(paste0("metil_WtPatients_", metil_level))), 1, 16), g2] + 1)
+
+      # Check if expression data for the gene in the patient groups and if the data are numeric
+      if (length(exprOfMutPatients) < 2 || length(exprOfWtPatients) < 2 ||  sum(!is.na(exprOfMutPatients)) < 2 || sum(!is.na(exprOfWtPatients)) < 2) {
+        # If there are no data or data is non-numeric, assign NA to the p and fold change values. Introducimos estas lineas porque no coinciden todos los pacientes del dataset de valores CpG con el los mut y genes transcritos.Los valores NA en R se consideran numéricos.La función t.test() necesita al menos dos observaciones válidas (no NA) en cada vector para poder realizar el cálculo.
+        genMatrix[g2, paste0("g_FC_", metil_level)] <- NA
+        genMatrix[g2, paste0("g_pval_", metil_level)] <- NA
+      } else {
+        # If there are data, calculate the fold change and the p value
+        average_1 <- mean(exprOfMutPatients, na.rm = TRUE)
+        average_2 <- mean(exprOfWtPatients, na.rm = TRUE)
+        foldchange <- (average_1-average_2)
+
+        # Calculate pvalue
+        pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+
+        # Assign the foldchange and pvalue to the matrix
+        genMatrix[g2, paste0("g_FC_", metil_level)] <- foldchange
+        genMatrix[g2, paste0("g_pval_", metil_level)] <- pvalue
+      }
+    }
+  }
+  
+  
+  # Agregar la matriz de este gen a la lista
+  numPatLevelMatrixList[[g]] <- genMatrix
+}
+```
+
+
+
+> length(numPatLevelMatrixList)
+[1] 152
+
+Guardamos lista
+```{r}
+listMatrixPvalFCmutCpG <- numPatLevelMatrixList
+
+# Matriz con resultados con metilaciones G1 y G2
+save(listMatrixPvalFCmutCpG, file ="~/vlad/TFM_bioinf/RESULTS/listMatrixPvalFCmutCpG_notABC3_g.rda")
+# load("~/vlad/TFM_bioinf/RESULTS/listMatrixPvalFCmutCpG_notABC3_g.rda")
+
+```
+####>*listMatrixPvalFCmutCpG_notABC3_g*
+
+
+
+##**Test results**
+
+Para ver valores en la lista de matrices:
+numPatLevelMatrixList[["GEN1"]]
+names(numPatLevelMatrixList)
+numPatLevelMatrixList[["GEN1"]]["GEN2","Low_WT"]
+View(head(numPatLevelMatrixList[[1]]))
+
+> length(numPatLevelMatrixList)
+[1] 152
+> nrow(numPatLevelMatrixList[[1]])
+[1] 480
+> nrow(numPatLevelMatrixList[[2]])
+[1] 480
+
+
+
+
+
+
+#--------**Process list of matrix**
+
+###**Names Rows g, g2**
+*Iteramos sobre los elementos de la lista y asignamos los nombres de cada elemento como prefijo de cada nombre de fila de su matriz correspondiente.*
+```{r}
+#listMatrixPvalFCmutNames <- listMatrixPvalFCmut
+listMatrixPvalFCmutNames <- listMatrixPvalFCmutCpG
+
+# Iterar sobre cada gen en la lista
+for(g in names(listMatrixPvalFCmutNames)) {
+  
+  # Actualizar los nombres de las filas para incluir el nombre del gen
+  rownames(listMatrixPvalFCmutNames[[g]]) <- paste(g, rownames(listMatrixPvalFCmutNames[[g]]), sep = "_")
+  
+}
+```
+####>*listMatrixPvalFCmutNames*
+
+>View(listMatrixPvalFCmutNames[[5]])
+
+
+
+###**Combining arrays into one and eliminating NA**
+```{r}
+# Combinar todas las matrices en una sola matriz
+PvalFCmutNames_TOTAL <- do.call(rbind, listMatrixPvalFCmutNames)
+
+#Eliminamos filas con todos los valores NA
+PvalFCmut_NoNA <- PvalFCmutNames_TOTAL[!apply(is.na(PvalFCmutNames_TOTAL), 1, all), ]
+
+save(PvalFCmut_NoNA, file ="~/vlad/TFM_bioinf/RESULTS/PvalFCmut_NoNA.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/PvalFCmut_NoNA.rda")
+
+dim(PvalFCmut_NoNA)
+```
+3419   26
+
+> class(PvalFCmut_NoNA)
+[1] "matrix" "array"
+View(PvalFCmut_NoNA)
+
+> dim(PvalFCmut_NoNA)
+[1] 3419   26
+
+
+#####>*PvalFCmut_NoNA* 
+*................................esta matriz tiene los resultados para g y para g2. Se procesarán de forma separada para metil genSD y para metil genMut*
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
