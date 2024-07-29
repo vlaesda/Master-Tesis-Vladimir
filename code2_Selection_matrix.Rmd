@@ -1,0 +1,531 @@
+
+
+# **1.Filtering datasets:**
+
+Anteriormente filtramos el dataset "tcga_brca_mutations" con el siguiente código: 
+
+```{r, eval=FALSE}
+mutations_filter <- subset(tcga_brca_mutations, Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins", "Missense_Mutation", "Nonsense_Mutation"))
+
+# Obtenemos *"mutations_filter"* (dataset "tcga_brca_mutations" filtrado) que solo contiene los tipos de mutaciones que nos interesan.
+table(mutations_filter$Variant_Classification)
+```
+
+
+**********************************************************************
+Trabajaremos con los siguientes datasets:
+
+*Utilizaremos "mutations_filter" (dataset "tcga_brca_mutations" filtrado) que solo contiene los tipos de mutaciones que nos interesan.*
+
+- tcga_brca_mutations (mutations_filter): Hugo_symbol, Tumor_Sample_Barcode, patient, Variant_ClasSification
+
+- firehose_brca_expr: TCGA-3C-AAAU-01A-11R-A41B-07, *firehose_brca_exprID$newPatID*.
+
+- firehose_brca_data: barcode TCGA-3C-AAAU-01A-11R-A41B-07, patient TCGA-3C-AAAU, sample TCGA-3C-AAAU-01A, sample_type ..... en este datase los pacientes pueden tener varias muestras con su respectiva identificación "sample". 
+
+**********************************************************************
+
+
+Los datase firehose_ tienen el mismo identificador para las muestras. "firehose_brca_expr" tiene la expresión de los genes de cada muestra. "firehose_brca_data" tiene los datos clínicos de cada muestra y puede contener varias muestras para un mismo paciente.
+
+> any(duplicated(firehose_brca_data$patient))
+[1] TRUE
+
+> nrow(firehose_brca_expr)
+[1] 1212
+> nrow(firehose_brca_data)
+[1] 1212
+> nrow(tcga_brca_mutations)
+[1] 89568
+
+<!--
+```{r}
+# Verificar si hay celdas repetidas en la columna 'firehose_brca_data$barcode'
+any(duplicated(firehose_brca_data$barcode))
+```
+-->
+
+
+#**1.1. Mutations**
+
+##>**mutations_filter**
+*Eliminamos muestras normales (112) y provinientes de tejido metastásico. Solo cojemos una muestra por paciente (la última muestra).*
+
+***************** La columna *mutations_filter$Tumor_Sample_Barcode* tiene un código que identifica el paciente y el tipo de muestra. Según la web "https://docs.gdc.cancer.gov/Encyclopedia/pages/TCGA_Barcode/" el 4 elemento del código es el tipo de muestra. Nos interesa eliminar los datos que provienen de muestras metastásicas y de tejido normal, es decir los que contienen el valor 06 y 11 respectivamente.
+
+> strsplit(mutations_filter$Tumor_Sample_Barcode[1], "-")[[1]][4]
+[1] "01A"
+
+<!-- 
+Este código de R en RStudio toma un vector de nombres de muestras de tumores y los divide en diferentes partes utilizando la función strsplit. Luego, extrae el cuarto elemento de cada resultado y crea una tabla con el recuento de ocurrencias de cada uno de estos elementos.
+
+En detalle, la función sapply es una versión simplificada de la función lapply que devuelve un vector como resultado en lugar de una lista. En este caso, se aplica la función anónima function(x) a cada elemento del vector mutations_filter$Tumor_Sample_Barcode.
+
+La función anónima function(x) toma cada elemento del vector mutations_filter$Tumor_Sample_Barcode y lo divide utilizando la función strsplit. La cadena de división es el guión ("-"). La función strsplit devuelve una lista con cada elemento separado de la cadena de división. La lista tiene una longitud igual al número de elementos separados.
+
+Para acceder al cuarto elemento de cada resultado de strsplit, se utiliza la notación de corchetes dobles [[1]][4].
+-->
+
+
+> table(sapply(mutations_filter$Tumor_Sample_Barcode, function(x) strsplit(x, "-")[[1]][4]))
+  01A   01B   01C   06A 
+64946   551    59   301 
+
+
+Vemos que hay 301 filas(genes) que provienen de muestras metastásicas. Ninguna muestra de tejido normal. Las eliminamos:
+
+```{r}
+# Filtrar el data frame para excluir las filas que corresponden a muestras metastásicas
+mutations_filter2 <- mutations_filter[!grepl("-06A-", mutations_filter$Tumor_Sample_Barcode),]
+
+table(sapply(mutations_filter2$Tumor_Sample_Barcode, function(x) strsplit(x, "-")[[1]][4]))
+```
+  01A   01B   01C 
+64946   551    59
+
+> unique(sapply(strsplit(mutations_filter3_patCpG$Tumor_Sample_Barcode, "-"), `[`, 4))
+[1] "01A" "01B" "01C"
+
+> length(unique(mutations_filter2$patient))
+[1] 967
+
+
+##> *mutations_filter2*
+
+
+#**Delete more one sample/patient**
+
+mutations_filter3_patCpG
+*mutations_filter2* 
+
+Podemos tener más de una muestra por paciente (a diferentes tiempos), por lo que los datos de mutaciones pueden ser diferentes y en la selección de pacientes wt/mut de la función "get_patients" pueden variar en función de los pacientes seleccionados ya que seleccionaría varias muestras por paciente.
+
+Tenemos que comprobar que en la columna Tumor_Sample_Barcode el código para cada gen/paciente solo esté una vez, dando preferencia a la última muestra en caso de que un mismo gen tenga varias. Queremos eliminar todas las filas con muestras duplicadas que no sean la última en temporalidad.
+
+1º Unique............ para quitar codigos repetidos de muestras.
+2º De las muestras cuyo código coincide excepto A, B o C, seleccionar la última. Utilizaremos los índices de las no seleccionadas para eliminarlas del dataset.
+
+
+##**For first 16 characters code:**
+
+
+Identify duplicated 15 characters elements:
+```{r}
+uniq_duplicated15 <- unique(samples_names_unique_short_less_letter[which(duplicated(samples_names_unique_short_less_letter))])
+class(uniq_duplicated15)
+length(uniq_duplicated15)
+uniq_duplicated15
+```
+
+*Eliminar del dataset las filas que esten repetidas (uniq_duplicated15), conservando la última muestra. Cada muestra estará repetirá por cada gen que haya sido analizado en dicha muestra. Tenemos que averiguar que muestras estan repetidas a diferente temporalidad (a,b,c) y eliminar todas menos la última, eliminando todas las filas que correspondan a las muestras a eliminar (cada fila de esa muestra contendrá un gen):*
+
+
+--- Bucle solo en filas repetidas:
+
+*Para cada elemento de uniq_duplicated, comprobar con los índices de uniq_duplicated15 en el dataset mutations_filter3_patCpG$Tumor_Sample_Barcode aquellos que no sea la última muestra y eliminarlos.*
+
+
+Obtenemos índices:
+```{r}
+indices_coincidentes15 <- which(substr(mutations_filter3_patCpG$Tumor_Sample_Barcode, 1, 15) %in% uniq_duplicated15)
+length(indices_coincidentes)
+```
+
+*Una vez localizados los índices de las filas de interés, realizaremos en estos una selección de las muestras que conincidan con uniq_duplicated, seleccionando aquellas con temporalidad más alta (las últimas) para cada una de las conincidencias. Utilizaremos los índices de las no seleccionadas para eliminarlas del dataset mutations_filter3_patCpG.*
+
+*Después, En las filas del dataset "mutations_filter3_patCpG" correspondientes al los índices del vector "indices_coincidentes", localizar los valores de "uniq_duplicated". Para cada valor, identificar la temporalidad más alta y extraer los índices de las otras temporalidades. Utilizar estos índices para eliminar del dataset dichas filas.*
+
+
+En las filas del dataset "mutations_filter3_patCpG" correspondientes al los índices del vector "indices_coincidentes" , localizar en la columna Tumor_Sample_Barcode los nombres del vector "uniq_duplicated15" (tiene nombres con 15 caracteres), teniendo en cuenta que los nombres de la columna Tumor_Sample_Barcode tiene más caracteres. El caracter 16 puede ser A, B Ó C. Queremos seleccionar aquellos nombres que coincidan con los del vector uniq_duplicated15 y que tengan la letra más alta siendo preferible en este orde C>B>A. 
+
+Por ejemplo si tenemos TCGA-A7-A26F-01 en el vector uniq_duplicated15, tendremos que buscar todas las coincidencias de este en los índices del vector indices_coincidentes para mutations_filter3_patCpG en la columna Tumor_Sample_Barcode. Si se encontrara dos nombres con el mismo nombre pero con el caracter 16 diferente (TCGA-A7-A26F-01A y TCGA-A7-A26F-01B por ejemplo) nos guardaríamos el índice del valor más alto, en esta caso el que tiene la B en el carácter 16 (TCGA-A7-A26F-01B).
+
+Guardaremos los índices de las filas seleccionadas para eliminar. 
+
+```{r}
+
+# Inicializar una lista para almacenar los índices seleccionados
+list_indexToDelete <- list()
+
+# Iterar sobre los nombres únicos de uniq_duplicated15
+for (CodeSample in uniq_duplicated15){
+  print(CodeSample)
+  # Filtrar las filas que coinciden con el nombre actual (obtenemos los índices)
+  indices <- which(substr(mutations_filter3_patCpG$Tumor_Sample_Barcode, 1, 15) == CodeSample)
+  
+  ## Valores de las celdas para índices
+  # mutations_filter3_patCpG$Tumor_Sample_Barcode[indices] 
+  
+  # Obtener la muestra más reciente C>B>A
+  last_SampleSelec <- max(substr(mutations_filter3_patCpG$Tumor_Sample_Barcode[indices], 1, 16))
+  
+  ############## Obtener los índices de las filas que no son de la última muestra
+  indexToDelete <- indices[which(substr(mutations_filter3_patCpG$Tumor_Sample_Barcode[indices], 1, 16) != last_SampleSelec)]
+
+  list_indexToDelete[[CodeSample]] <- indexToDelete
+  
+}
+
+sum(lengths(list_indexToDelete))
+```
+
+> sum(lengths(list_indexToDelete))
+[1] 546
+
+```{r}
+# Crear un nuevo dataset sin las filas indicadas en list_indexToDelete
+mutations_filter4_patCpG_notABC <- mutations_filter3_patCpG[-unlist(list_indexToDelete), ]
+
+nrow(mutations_filter4_patCpG_notABC)
+nrow(mutations_filter3_patCpG)
+```
+
+---
+
+
+
+
+
+
+##**For the entire code:**
+*mutations_filter4_patCpG_notABC*
+
+Get duplicated Tumor_Sample_Barcode:
+```{r}
+
+samplesNamesUniqueComp <- unique(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode)
+
+
+length(unique(mutations_filter3_patCpG$Tumor_Sample_Barcode))
+length(unique(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode))
+length(unique(substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 20)))
+length(unique(substr(mutations_filter4_patCpG_notABC$Tumor_Sample_Barcode, 1, 16)))
+
+```
+
+*No hay muestras repetidas para códigos de más de 16 carácteres, por lo que no es necesario realizar más filtrado.*
+
+
+
+
+#**1.2. Expresion**
+*(firehose_brca_expr)*
+
+.................EXPRESIÓN MÁS HOMOGENEA DEBIDO A LA NORMALIZACIÓN (protocolo de normalización rsem).!!!!!!!!!!!
+La normalización empieza con los reads no con los counts y también está realizada en genes ya que si no tendríamos más expresión en los genes grandes ya que al secuenciar hay más fragmentos de ese gen dando a entender erronamente que hay más expresión de ese gen. También tiene en cuenta las muestras, ya que si hay más material da la impresión de que hay más expresión en esa muestra. 
+*Li B, Dewey CN. RSEM: accurate transcript quantification from RNA-Seq data with or without a reference genome. BMC Bioinformatics. 2011 Aug 4;12:323. doi: 10.1186/1471-2105-12-323. PMID: 21816040; PMCID: PMC3163565.*
+
+
+
+
+
+*Procedemos a eliminar las muestras (filas) con metástasis y de tejido normal:*
+
+
+
+**Filtrar el data frame para excluir las filas que corresponden a muestras metastásicas y de tejido normal**
+```{r}
+# Eliminamos las muestras con esas secuencias de caracteres
+expr_filter <- firehose_brca_expr[!grepl("-06A-|-11A-|-11B-", rownames(firehose_brca_expr)),]
+```
+
+> nrow(expr_filter)
+[1] 1093
+>table(sapply(rownames(expr_filter), function(x) strsplit(x, "-")[[1]][4]))
+ 01A  01B 
+1079   14
+> length(unique(sapply(rownames(expr_filter), function(x) strsplit(x, "-")[[1]][3])))
+[1] 1093
+
+> length(unique(substr(rownames(expr_filter), 1 , 20)))
+[1] 1093
+> length(unique(substr(rownames(expr_filter), 1 , 16)))
+[1] 1093
+> length(unique(substr(rownames(expr_filter), 1 , 12)))
+[1] 1093
+........................no hay muestras repetidas!!
+
+
+> sum(duplicated(substr(rownames(expr_filter), 1 , 12)))
+[1] 0
+
+####> *expr_filter*
+
+
+
+#### **Selecc genes con 90% > 2 expr**
+*Tenemos que seleccionar los genes para los cuales la expresión del 90% de pacientes/muestras sea superior a 2.*
+
+exclude gens low expresión (nos quedamos con aquellos genes con el 90% de pacientes con expresión superior a 2)
+ 90% pacientes - expresión > 2 
+
+
+```{r}
+# Selecciona las columnas que cumplen con el criterio del 90%
+prop_valores_mayores_a_2 <- apply(expr_filter > 2, 2, function(x) sum(x, na.rm = TRUE) / sum(!is.na(x)))
+genes90percent2 <- names(prop_valores_mayores_a_2[prop_valores_mayores_a_2 >= 0.9])
+
+# Crea un nuevo dataframe con los genes seleccionados
+expr_filter90 <- expr_filter[genes90percent2]
+length(expr_filter90)
+length(expr_filter)
+View(expr_filter90)
+```
+
+####> *expr_filter90*
+
+####**selecc genes sd>2**
+
+```{r}
+# Estandarizar los datos
+expr_filter90Log2 <- log2(expr_filter90+1)
+
+# Calcular la desviación estándar de cada columna de datos estandarizados
+expr_filterLog2_sd <- apply(expr_filter90Log2, 2, sd)
+
+# Comprobamos número de valores con sd >2:
+length(which(expr_filterLog2_sd>2))
+#.........................g2 col (son los genes con más de 2sd)
+
+genescol <- (which(expr_filterLog2_sd>2))
+View(genescol)
+```
+
+#**1.3. Clinical data**
+*firehose_brca_data*
+******* Eliminamos muestras con el factor "Metastasic" y  "Tissue Normal" del dataset *"firehose_brca_data$sample_type"*:
+
+> table(firehose_brca_data$sample_type)
+
+         Metastatic       Primary Tumor Solid Tissue Normal 
+                  7                1093                 112 
+
+```{r}
+data_filter <- subset(firehose_brca_data, sample_type == "Primary Tumor")
+table(data_filter$sample_type)
+
+```
+ 
+ > nrow(data_filter)
+[1] 1093
+ > table(sapply(data_filter$barcode, function(x) strsplit(x, "-")[[1]][4]))
+ 01A  01B 
+1079   14
+> length(unique(sapply(data_filter$barcode, function(x) strsplit(x, "-")[[1]][3])))
+[1] 1093   ...................no hay pacientes repetidos
+
+```{r}
+# Contamos los pacientes:
+length(unique(data_filter$patient))
+length(data_filter$patient)
+sum(duplicated(data_filter$patient))
+```
+####> *data_filter*
+
+
+#### **Seleción muestras A / B**
+
+No hay pacientes repetidos y el número total de muestras es igual al número de pacientes, por lo que solo hay una muestra por paciente por lo que no es necesario hacer una selección de las muestras por fecha (código A y B)
+
+
+# **2. Preparing array to save data**
+
+## **Selecting genes of interest for rows and columns**
+
+Para las filas:
+```{r}
+
+#Obtenemos el número de los pacientes mutados por cada gen (hecho en TFM2):
+
+# Listado total de genes mutados.
+genes <- unlist(unique(mutations_filter2$Hugo_Symbol))
+
+# > length(genes)
+# [1] 15315
+
+# Obtenemos en cuantos pacientes esta cada gen ( == x), es decir cuantas veces está x en ese vector, sin tener en cuenta las repeticiones de un mismoo gen en un paciente (unique), y contabilizando el número total de veces que aparece cada gen (length). Con la función sapply reiteramos sobre todos los pacientes creando un vector que contabiliza el número total de pacientes en los que aparece un gen sin contabilizar repeticiones dentro de un mismo paciente. 
+NumOfMutatedPatients <- sapply(genes, function(x) length(unique(mutations_filter2$patient[mutations_filter2$Hugo_Symbol == x])))
+
+#View(sort(NumOfMutatedPatients, decreasing = TRUE))
+View(sort((NumOfMutatedPatients[NumOfMutatedPatients >=20]), decreasing = TRUE))
+
+length(which(NumOfMutatedPatients >=20)) #.........o también
+#length(nameGenes20patMut)
+#.............g1 rows (genes de los pacientes con más de 20 mutados)
+#[1] 156
+```
+
+Para las columnas:
+```{r}
+# Estandarizar los datos
+expr_filter90Log2 <- log2(expr_filter90+1)
+
+# Calcular la desviación estándar de cada columna de datos estandarizados
+expr_filterLog2_sd <- apply(expr_filter90Log2, 2, sd)
+
+# Comprobamos número de valores con sd >2:
+length(which(expr_filterLog2_sd>2))
+#.........................g2 col (son los genes con más de 2sd)
+
+```
+
+
+## **Creating matrix where we will store the p-value**
+
+Creamos matriz con los valores obtenidos para columnas y filas
+```{r}
+pvalMatrix4 <- matrix(NA, nrow=156, ncol=497)
+#> dim(pvalMatrix4)
+#[1]  156 1132
+
+# Hecho en TFM2:
+# genes <- unlist(unique(mutations_filter2$Hugo_Symbol))
+# NumOfMutatedPatients <- sapply(genes, function(x) length(unique(mutations_filter2$patient[mutations_filter2$Hugo_Symbol == x])))
+
+# Cambiamos los nombres de las filas por los de los genes con más de 20 pacientes con mutaciones para ese gen
+nameGenes20patMut <- names(NumOfMutatedPatients[NumOfMutatedPatients >=20])
+rownames(pvalMatrix4) = nameGenes20patMut
+
+#cambiamos nombres de las columnas por los genes con sd >2. En consecuencia, estamos seleccionando los genes con sd>2.
+namesGenesFilterExpSd2 <- names(expr_filterLog2_sd[expr_filterLog2_sd>2])
+colnames(pvalMatrix4) = namesGenesFilterExpSd2
+```
+###>*nameGenes20patMut*
+###>*namesGenesFilterExpSd2*
+
+# **3. Functions to get wt y mut groups**
+
+*select the most variable genes based on standard deviation y  al número de pacientes mutados. #Selecciona los pacientes mutados y wt para un gen determinado (nameGenes20patMut) y compara la expresión génica de esos pacientes en todos los genes con sd>2 (genesExpSd2).##Comparamos los genes con más de 20 pacientes con mutaciones con los genes con más de 2sd.*
+
+Definimos que pacientes tienen mutado cada gen. En el dataset "tcga_brca_mutations" encontramos todas las mutaciones con sus respectivos pacientes. El resto de pacientes no mutados en ese gen serán wt para ese gen. Utilizaremos *"mutations_filter2"* (dataset "tcga_brca_mutations" filtrado) que solo contiene los tipos de mutaciones que nos interesan.
+
+Construimos una función que cree un grupo con todos los pacientes que tienen mutación en un mismo gen y otro un grupo llamado "wt" para los pacientes que no tienen mutado ese gen. Después tendrá que comparar la expresión génica de los grupos mediante mediante la desviación estandar con el p-valor.
+
+<!--
+Ejemplo para un solo gen:
+```{}
+# positions <- which(mutations_filter$Hugo_Symbol=="PIK3CA")
+# 
+# #patientids <- mutations_filter$patient
+# mutpatients <- unique(patientids[positions])
+# 
+# #codigo de muestra para un gen. Obtenemos los pacientes con mutaciones para ese gen.
+# mutpatients <- unique(mutations_filter$patient[which(mutations_filter$Hugo_Symbol=="PIK3CA")])
+
+#allpatients <- unique(patientids)
+# length(mutpatients)
+# length(allpatients)
+```
+-->
+
+
+```{r}
+#1. Para obtener los pacientes mutados para cada gen.
+getMutatedPatients <- function(gene, mutations_filter2) {
+  return(unique(mutations_filter2$patient[which(mutations_filter2$Hugo_Symbol==gene)]))
+}
+
+#getMutatedPatients <- function(gene, x) {
+  #return(unique(x$patient[which(x$Hugo_Symbol==gene)]))
+#}
+
+#2. Para obtener los pacientes sin mutaciones para un gen.
+allpatients <- unique(mutations_filter2$patient)
+
+getWildtypePatients <- function(gene, mutations_filter2) {
+    return(setdiff(allpatients,unique(mutations_filter2$patient[which(mutations_filter2$Hugo_Symbol==gene)])))
+}
+```
+
+
+# **4. Loop that calculates p-value from the comparison of wt and mut groups for the genes**
+
+```{r}
+##3. Creamos el bucle que itera:
+#Selecciona los pacientes mutados y wt para un gen determinado (nameGenes20patMut) y compara la expresión génica de esos pacientes en todos los genes con sd>2 (namesGenesFilterExpSd2).
+for (g1 in nameGenes20patMut) {
+  for (g2 in namesGenesFilterExpSd2) {
+    mutpatients2 <- getMutatedPatients(g1, mutations_filter2)
+    wtpatients2 <- getWildtypePatients(g1, mutations_filter2)
+    
+    #Coje la expresión estandarizada del gen mutado y del gen wt.
+    exprOfMutPatients <- log2(expr_filter90[mutpatients2,g2]+1)
+    exprOfWtPatients <- log2(expr_filter90[wtpatients2,g2]+1)
+    
+    #Calcula el pvalor de pacientes mutados y wt.
+    pvalue4 <- t.test(exprOfMutPatients, exprOfWtPatients)$p.value
+    #Incluye el pvalor en la matriz que creamos.
+    pvalMatrix4[g1,g2] <- pvalue4
+  }
+}
+
+pvalMatrix4SEG <- pvalMatrix4
+#pvalMatrix3 <- pvalMatrix3SEG
+
+saveRDS(pvalMatrix4, "pvalMatrix4.rds")
+#pvalMatrix4 = readRDS("pvalMatrix4.rds")
+
+sum(is.na(pvalMatrix4))
+```
+##> *pvalMatrix4*
+
+
+```{r}
+# Count nº colums and rows whitout values<0.05
+num_cols <- sum(colSums(pvalMatrix4 <= 0.05) == 0)
+num_rows <- sum(rowSums(pvalMatrix4 > 0.05) == 0)
+
+num_cols
+num_rows
+# .........There are´n colums or rows whitout values under 0.05
+
+dim(pvalMatrix4)
+prod(dim(pvalMatrix4)) #multiplica el número de filas por el de columnas
+length(pvalMatrix4)
+```
+
+
+
+# **5. Graphing**
+
+
+## **Heat map p-value (no log10p-value)**
+
+```{r}
+#pdf(file = "~/heatmapMat2.pdf")
+
+# Generar el heatmap
+heatmap(pvalMatrix4, 
+        #Rowv = NA, 
+        #Colv = NA, 
+        col = colorRampPalette(c("red", "white"))(100), 
+        scale = "none", 
+        margins = c(15, 3))
+
+#dev.off()
+```
+
+
+
+## **Heatmap color**
+
+```{r}
+#pdf(file = "~/heatmap2Mat2.pdf")
+# Definir los cortes y etiquetas para los colores personalizados
+cuts <- c(0, 0.05, 0.1, 0.15, Inf)
+colors <- colorRampPalette(c("red", "darkorange", "yellow", rep("lightgrey", 17)))(100)
+
+# Asignar colores a los valores de p utilizando los cortes y etiquetas definidos anteriormente
+#col_matrix <- cut(pvalMatrix, breaks = cuts, labels = colors)
+
+# Generar el heatmap con los colores personalizados
+heatmap(pvalMatrix4, col = colors, scale = "none", margins = c(15, 3))
+#dev.off()
+```
+
+
+
+
+
+
+

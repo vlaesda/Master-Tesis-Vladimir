@@ -1,0 +1,219 @@
+
+
+
+#**Downloading datasets**
+
+http://firebrowse.org/
+
+```{r}
+load("firehose_brca_data.RData")
+```
+firehose_brca_data.RData ......... archivo de mutaciones,  datos clínicos y  expresión.
+
+```{r}
+#View(tcga_brca_mutations)
+str(tcga_brca_mutations)
+```
+
+https://docs.gdc.cancer.gov/Encyclopedia/pages/TCGA_Barcode/
+
+
+
+#**Select mutations of interest:**
+
+*(1) select the most commonly mutated genes, e.g. 500. Keep: Frame_Shift_Del, Frame_Shift_Ins, In_Frame_Del, In_Frame_Ins, Missense_Mutation, Nonsense_Mutation.*
+
+```{r}
+table(tcga_brca_mutations$Variant_Classification)
+summary(tcga_brca_mutations$Variant_Classification)
+class (tcga_brca_mutations$Variant_Classification)
+```
+
+Es una cadena de carácteres, la covertimos en factor.
+```{r}
+tcga_brca_mutations$Variant_Classification <- as.factor(tcga_brca_mutations$Variant_Classification)
+class(tcga_brca_mutations$Variant_Classification)
+```
+
+Extraemos los niveles "Frame_Shift_Del, Frame_Shift_Ins, In_Frame_Del, In_Frame_Ins, Missense_Mutation, Nonsense_Mutation" del factor mediante subset para crear un nuevo df al que llamamos "mutations_filter".
+
+```{r}
+mutations_filter <- subset(tcga_brca_mutations, Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins", "Missense_Mutation", "Nonsense_Mutation"))
+
+table(mutations_filter$Variant_Classification)
+#str(mutations_filter)
+```
+##>*mutations_filter*
+
+
+
+#**Check sd of the expression of each gene and sort**
+*Contabilizamos el número total de pacientes que tiene cada gen mutado y los ordenamos*
+
+```{r}
+genes <- unlist(unique(mutations_filter$Hugo_Symbol))
+
+NumOfMutatedPatients <- sapply(genes, function(x) length(unique(mutations_filter$patient[mutations_filter$Hugo_Symbol == x])))
+
+NumOfMutatedPatients_500 <- sort(NumOfMutatedPatients, decreasing = T)[1:500]
+
+#View(NumOfMutatedPatients_500)
+```
+
+
+
+##**barplot of most commonly mutated genes**
+
+```{r}
+#pdf(file = "~/mostpatients.pdf", width = 10)
+barplot(NumOfMutatedPatients_500, main = "500 Genes ordered by the number of patients who have mutation for that gene.",
+        xlab = "Genes",
+        ylab = "Number of patients",
+        names.arg = FALSE)
+#dev.off()
+```
+
+```{r}
+#pdf(file = "~/mostpatients40.pdf", width = 10)
+# Ordena el dataset según la columna Value en orden descendente seleccionando los 40 primeros.
+NumOfMutatedPatients_40 <- sort(NumOfMutatedPatients, decreasing = T)[1:40]
+barplot(NumOfMutatedPatients_40, las=2, cex.names = 0.5)
+#dev.off()
+```
+
+
+#**Check sd of the expression of each gene and sort**
+
+*select the most variable genes based on standard deviation.*
+
+log2(firehose_brca_expr+1)
+
+
+##**Standardize data**
+```{r}
+# Estandarizar los datos
+exprlog2 <- log2(firehose_brca_expr+1)
+
+# Calcular la desviación estándar de cada columna de datos estandarizados
+exprlog2_sd <- apply(exprlog2, 2, sd)
+
+# Ordenar los valores de desviación estándar de mayor a menor y seleccionar los genes con mayor desviación estándar
+exprlog2_sdSORT <- sort(exprlog2_sd, decreasing = TRUE)
+```
+
+##**barplot of sd orderer genes**
+```{r}
+#pdf(file = "~/sdORDER.pdf", width = 10)
+barplot(exprlog2_sdSORT, main = "Genes ordered by the standar desviation of their gene expression .",
+        xlab = "Genes",
+        ylab = "Standar desviation",
+        names.arg = FALSE)
+#  seleccionar los 40 genes con mayor desviación estándar
+barplot(exprlog2_sdSORT[1:50], las=2, cex.names = 0.5)
+```
+
+
+
+#**take the most commonly mutated gene**
+*take the most commonly mutated gene and check if gene expression is different in wt vs mut cases.*
+
+*define which patients are mutated in a certain gene, all remaining patients are then wildtype.*
+
+##**Determinate genes sd>2**
+
+ Solo utilizaremos aquellos genes cuya desviación estandar sea superior a 2:
+ > barplot(sort(exprlog2_sd))
+ > barplot(sort(exprlog2_sd)[1:500])
+ > length(which(exprlog2_sd>1))
+ [1] 7869
+ > length(which(exprlog2_sd>2))
+ [1] 1232
+
+ Y aquellos que estén mutados en más de 19 pacientes:
+length(which(NumOfMutatedPatients >=20))
+279
+
+
+
+## **Prepare function**
+*En el dataset mutations_filter solo hay pacientes con mutaciones, por eso no es necesario seleccionar el tipo de muestra.*
+
+```{r}
+# positions <- which(mutations_filter$Hugo_Symbol=="PIK3CA")
+# patientids <- mutations_filter$patient
+# mutpatients <- unique(patientids[positions])
+
+
+#Todo en una sola línea (las 3 líneas anteriores):
+mutpatients <- unique(mutations_filter$patient[which(mutations_filter$Hugo_Symbol=="PIK3CA")])
+
+#allpatients <- unique(patientids)
+# length(mutpatients)
+# length(allpatients)
+```
+
+
+
+## **Create function**
+
+Código grupos wt/mut:
+```{r}
+
+mutpatients <- unique(mutations_filter$patient[which(mutations_filter$Hugo_Symbol=="PIK3CA")])
+
+#allpatients <- unique(patientids)
+# length(mutpatients)
+# length(allpatients)
+
+#Ahora creamos la función:
+#1
+getMutatedPatients <- function(gene, table) {
+  return(unique(table$patient[which(table$Hugo_Symbol==gene)]))
+}
+
+#2
+getWildtypePatients <- function(gene, table) {
+  allpatients <- unique(patientids)
+  return(setdiff(allpatients,unique(table$patient[which(table$Hugo_Symbol==gene)])))
+}
+
+
+#comparamos los genes >= 20 pacientes con mutaciones con los genes con más de 2sd.
+#> length(which(exprlog2_sd>2)).........................g2 col
+#[1] 1232
+#> length(which(NumOfMutatedPatients >=20)).............g1 rows
+#[1] 279
+
+
+pvalMatrix <- matrix(NA, nrow=279, ncol=1232)
+rownames(matrix) = geneNamesOfGenesWithMutation
+
+
+#3
+for (g1 in geneswithmutations[1:10]) {
+  for (g2 in genestotesstexpression[1:10]) {
+    mutpatients2 <- getMutatedPatients(g1, mutations_filter)
+    wtpatients2 <- getWildtypePatients(g1, mutations_filter)
+    
+    exprOfMutPatients <- log2(firehose_brca_expr[mutpatients2,g2]+1)
+    exprOfWtPatients <- log2(firehose_brca_expr[wtpatients2,g2]+1)
+    
+   # boxplot(exprOfMutPatients, exprOfWtPatients)
+    pvalue <- t.test(exprOfMutPatients, exprOfWtPatients)$p
+    matrix[g1,g2] <- pvalue
+  }
+}
+
+
+wtpatients <- setdiff(allpatients, mutpatients)
+length(wtpatients)
+
+```
+
+
+
+
+
+
+
+
