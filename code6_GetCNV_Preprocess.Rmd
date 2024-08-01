@@ -1,0 +1,2132 @@
+
+
+#------------------- **CNV**------------------
+
+**Main objectives:**
+1. Select genes >=20 patients whit copy number.
+2. Create 2 matrix whit combination of selected genes (copy number vs SD) whit p-values and select gen-cobinations whit significantly commbinations.
+3. For selected gen-combinations get boxplot whit gain-equal gene copy in every metilation level. 3 boxplot x (tot_met,low_met, med_met, high_met)
+
+
+
+# -----------**1.Get CNV**
+
+# 1.1.**Downloading CNV**
+
+*Manual:*
+https://bioconductor.org/packages/devel/bioc/vignettes/TCGAbiolinks/inst/doc/download_prepare.html#Copy_Number_Variation
+
+https://docs.gdc.cancer.gov/Data/Bioinformatics_Pipelines/CNV_Pipeline/
+
+*Copy Number Estimate:* A Gene-level Copy Number file that displays integer copy number on a gene level. Generated from Copy Number Segment or Allele-Specific Copy Number Segment files.
+
+
+
+Las principales opciones disponibles para los datos de *Copy Number Variation (CNV)* en TCGA incluyen:
+
+*Copy Number Segment* (Segmento de Número de Copias): Estos datos representan segmentos del genoma que han sido evaluados para determinar su número de copias. Los segmentos pueden ser regiones más grandes del genoma y se dividen en segmentos de ganancia de copias (amplificaciones) o pérdida de copias (deleciones). Estos datos proporcionan información detallada sobre las variaciones en el número de copias en todo el genoma, incluyendo las regiones no codificantes. Cada segmento se asocia con una estimación del número de copias, que puede ser una ganancia de copias (amplificación) o una pérdida de copias (deleción). 
+*Masked Copy Number Segment* (Segmento de Número de Copias Oculto): Similar a los "Copy Number Segments," estos datos también representan segmentos del genoma con evaluaciones de número de copias, pero pueden incluir segmentos que han sido ocultados o enmascarados debido a la presencia de ruido o incertidumbre en la detección de copias. Esto puede ser útil para eliminar segmentos de baja confiabilidad o que pueden no representar variaciones verdaderas del número de copias. A menudo, los datos de CNV pueden estar sujetos a máscaras o filtros para ocultar ciertos segmentos debido a ruido o incertidumbre en la detección de copias. Los "Masked Copy Number Segments" pueden proporcionar una versión más procesada y depurada de los datos de CNV.
+**Gene Level Copy Number** (Número de Copias a Nivel de Gen): Datos que se centran en las variaciones del número de copias en segmentos asociados con genes específicos. Estos datos se centran en la evaluación del número de copias en segmentos específicos del genoma que están asociados con genes individuales. En lugar de representar segmentos del genoma en su totalidad, se centran en los genes y proporcionan información sobre las amplificaciones o deleciones de copias en regiones génicas específicas. Estos datos son útiles para comprender cómo las variaciones en el número de copias pueden afectar la expresión génica y su relación con el cáncer.
+
+
+*Descargar* a través de TCGAbiolinks o manualmente a través del portal de datos en línea de TCGA.
+https://portal.gdc.cancer.gov/projects/TCGA-BRCA
+
+Ejemplos códigos descarga CNV:
+
+https://bioconductor.org/packages/devel/bioc/vignettes/TCGAbiolinks/inst/doc/download_prepare.html#GDCprepare:_Outputs
+
+  Harmonized database: data aligned against hg38
+    Copy Number Variation
+
+http://firebrowse.org/?cohort=BRCA&download_dialog=true
+
+Manual descarga:
+https://bioconductor.org/packages/release/bioc/vignettes/TCGAbiolinks/inst/doc/download_prepare.html
+
+   
+Ejemplo:
+----------------------query.gbm.nocnv$results[[1]]--------------------------
+
+query.gbm.nocnv <- GDCquery(project = "TCGA-GBM",
+                            data.category = "Copy number variation",
+                            legacy = TRUE,
+                            file.type = "nocnv_hg19.seg",
+                            sample.type = c("Primary solid Tumor"))
+query.gbm.nocnv$results[[1]] <- query.gbm.nocnv$results[[1]][1:20,]
+GDCdownload(query.gbm.nocnv)
+gbm.nocnv <- GDCprepare(query.gbm.nocnv, save = TRUE, save.filename = "GBMnocnvhg19.rda")
+
+
+query <- GDCquery(
+    project = "TCGA-ACC",
+    data.category = "Copy Number Variation",
+    data.type = "Gene Level Copy Number",              
+    access = "open"
+)
+GDCdownload(query)
+data <- GDCprepare(query)
+
+
+
+
+I solve the problem by removing redundant cases with following codes.
+query.exp.hg19 <- GDCquery(project = "TCGA-GBM",
+data.category = "Gene expression",
+data.type = "Isoform expression quantification",
+platform = "Illumina HiSeq",
+legacy = T)
+
+query.exp.hg19.2=query.exp.hg19
+tmp=query.exp.hg19.2$results[[1]]
+tmp=tmp[which(!duplicated(tmp$cases)),]
+query.exp.hg19.2$results[[1]]=tmp
+
+GDCdownload(query.exp.hg19.2)
+gbm_exp=GDCprepare(query.exp.hg19.2)
+
+-------------------------------------------------------------------------
+
+Ejemplo2:
+
+Genomic analysis
+Copy number variations (CNVs) have a critical role in cancer development and progression. A chromosomal segment can be deleted or amplified as a result of genomic rearrangements, such as deletions, duplications, insertions and  translocations. CNVs are genomic regions greater than 1 kb with an alteration of copy number between two conditions (e.g., Tumor versus Normal).
+TCGA collects copy number data and allows the CNV profiling of cancer. Tumor and paired-normal DNA samples were analyzed for CNV detection using microarray and sequencing-based technologies. Level 3 processed data are the aberrant regions along the genome resulting from CNV segmentation, and they are available for all copy number
+technologies.
+
+In this section, we will show how to analyze CNV level 3 data from TCGA to identify recurrent alterations in cancer genome. We analyzed GBM and LGG segmented CNV from SNP array (Affymetrix Genome-Wide Human SNP Array 6.0).
+
+Pre-Processing Data. The only CNV platform available for both LGG and GBM in TCGA is “Affymetrix Genome-Wide Human SNP Array 6.0”. Using TCGAbiolinks, we queried for CNV SNP6 level 3 data for primary solid tumor samples in the legacy database. Data for selected samples were downloaded and prepared in two separaterse objects (RangedSummarizedExperiment).
+
+query.lgg.nocnv <– GDCquery(project = "TCGA–LGG",
+  data.category = "Copy number variation",
+  legacy = TRUE,
+  file.type = "nocnv_hg19.seg",
+  sample.type = c("Primary solid Tumor")
+  )
+  
+  
+  
+# **Acces summarizedExperiment**
+Listing 2. Downloading TCGA copy number variation data from GDC harmonized database with TCGAbiolinks
+If a summarizedExperiment object was chosen, the data can be accessed with three different accessors: assay for the data information, rowRanges to gets the range of values in each row and colData to get the sample information (patient, batch, sample type, etc)9,10. An example is shown in Listing 3.
+
+get expression matrix
+data <– assay(exp.gbm.lgg)
+
+get genes information
+genes.info <– rowRanges(exp.gbm.lgg)
+
+get sample information
+sample.info <– colData(exp.gbm.lgg)
+
+
+
+
+
+# **Correcting problems**  
+
+
+
+> cnv_data <- GDCprepare(query_cnv,
++                   save=TRUE,
++                   save.filename = "cnv_data.rda",
++                   summarizedExperiment = FALSE)
+Error in GDCprepare(query_cnv, save = TRUE, save.filename = "cnv_data.rda",  : 
+  There are samples duplicated. We will not be able to prepare it
+
+
+<!--
+We will retry to access GDC!
+--------------------
+oo Filtering results
+--------------------
+ooo By data.type
+----------------
+oo Checking data
+----------------
+ooo Checking if there are duplicated cases
+Warning: There are more than one file for the same case. Please verify query results. You can use the command View(getResults(query)) in rstudio
+ooo Checking if there are results for the query
+-------------------
+o Preparing output
+-------------------
+Downloading data for project TCGA-BRCA
+Of the 3201 files for download 3201 already exist.
+All samples have been already downloaded
+Error in GDCprepare(query = query_cnv) :
+There are samples duplicated. We will not be able to prepare it
+-->
+
+
+
+Visualizamos query_cnv: 
+
+
+El error es debido a que tenemos muestras duplicadas porque estan procesadas mediante diferentes workFlow:
+
+> table(query_cnv[[1]][[1]]$analysis_workflow_type)
+ABSOLUTE LiftOver            ASCAT2            ASCAT3 
+             1057              1084              1060
+
+Las diferencias principales entre estas herramientas se relacionan con la precisión de las estimaciones de ploidía, la consideración de la heterogeneidad tumoral.
+
+
+Todas las muestras tiene "platform" Affymetrix SNP 6.0 pero solo las ABSOLUTE LiftOver tienen valores para sample_type (todas "Primary Tumor"). Además son las únicas que tienen un único valor en cases.
+
+> table(query_cnv[[1]][[1]]$platform)
+Affymetrix SNP 6.0 
+              3201 
+
+> query_cnv[[1]][[1]]$cases[1:3]
+[1] "TCGA-A7-A26E-01A-11D-A275-01"                              "TCGA-E2-A3DX-01A-21D-A20R-01,TCGA-E2-A3DX-10A-01D-A20R-01"
+[3] "TCGA-A2-A0YD-01A-11D-A107-01,TCGA-A2-A0YD-10A-01D-A107-01"
+> query_cnv[[1]][[1]]$analysis_workflow_type[1:3]
+[1] "ABSOLUTE LiftOver" "ASCAT2"            "ASCAT2" 
+
+.....................Utilizaremos "ABSOLUTE LiftOver".
+
+
+Code F ok:
+     
+-------------------------------------------------------------------
+library(TCGAbiolinks)
+query_cnv <- GDCquery(project = "TCGA-BRCA",
+                      data.category = "Copy Number Variation",
+                      data.type = "Gene Level Copy Number",
+                      legacy = FALSE)
+
+-Descarga los datos
+GDCdownload(query_cnv,
+            directory = "/home/isilon/users/o_fernandf/GDCdata")
+
+query_cnv_modified <- query_cnv
+query_cnv_modified[[1]][[1]] <- query_cnv_modified[[1]][[1]][query_cnv_modified[[1]][[1]]$analysis_workflow_type == "ABSOLUTE LiftOver", ]
+
+-Carga y prepara los datos descargados para su análisis
+cnv_data <- GDCprepare(query = query_cnv_modified,
+                       directory = "/home/isilon/users/o_fernandf/GDCdata")
+
+------------------------------------------------------------------
+
+
+
+?GDCquery
+
+
+#**GDCquery summarizedExp TRUE**
+
+https://support.bioconductor.org/p/9140559/
+
+
+Instala y carga la librería TCGAbiolinks si aún no está instalada:
+```{r}
+# Instala y carga la librería TCGAbiolinks si aún no está instalada
+if (!requireNamespace("TCGAbiolinks", quietly = TRUE)) {
+  install.packages("TCGAbiolinks")
+}
+library(TCGAbiolinks)
+```
+
+GDCquery
+```{r}
+# Realiza la consulta para obtener los datos de "Copy Number Segment" para TCGA-BRCA
+query_cnv <- GDCquery(project = "TCGA-BRCA",
+                      data.category = "Copy Number Variation",
+                      data.type = "Gene Level Copy Number",
+                      #sample.type = c("Primary solid Tumor"),
+                      #sample.id = c("ID1", "ID2", ...),
+                      #barcode = patientsG2_CpG,
+                      #platform="Affymetrix SNP 6.0",
+                      legacy = FALSE,
+                      access = "open")
+
+# summarizedExperiment = TRUE (opción por defecto) puede ser la elección adecuada. Seleccionamos summarizedExperiment = FALSE para evitar procesado adicional.
+
+#la función GDCprepare() del paquete TCGAbiolinks, suele devolver un objeto de la clase ExpressionSet cuando summarizedExperiment se establece en FALSE.
+
+
+# Descarga los datos
+GDCdownload(query_cnv)
+
+
+
+################################################################################################
+########################### Corrección problemas (muestras duplicadas) #########################
+
+# Seleccionamos muestras analysis_workflow_type == "ABSOLUTE LiftOver"
+query_cnv_modified <- query_cnv
+query_cnv_modified[[1]][[1]] <- query_cnv_modified[[1]][[1]][query_cnv_modified[[1]][[1]]$analysis_workflow_type == "ABSOLUTE LiftOver", ]
+
+################################################################################################
+################################################################################################
+
+
+
+# Carga y prepara los datos descargados para su análisis
+cnv_data <- GDCprepare(query_cnv_modified,
+                  save=TRUE,
+                  save.filename = "~/vlad/TFM_bioinf/DescargasDatos/cnv_data2.rda",
+                  #summarizedExperiment = FALSE
+                  )
+#"/home/gpfs/o_estaldar/vlad/TFM_bioinf/GDCdata/TCGA-BRCA/harmonized/",
+
+save(cnv_data, file = "vlad/TFM_bioinf/DescargasDatos/cnv_data.rda")
+```
+
+
+
+La estructura de query_cnv es un objeto de tipo data.frame con 12 variables (columnas). results: Esta variable es una lista que contiene 3201 observaciones (filas), y cada observación es un subconjunto de 27 variables relacionadas con los resultados de la consulta. Ten en cuenta que results es una lista que contiene información detallada sobre los resultados de la consulta, mientras que las otras variables son metadatos relacionados con la consulta en sí. Puedes acceder a los detalles de los resultados utilizando la estructura de lista en results.
+
+> class(query_cnv)
+[1] "data.frame"
+> View(query_cnv)
+> View(query_cnv[[1]][[1]])         ..................es lo mismo View(getResults(query_cnv))
+
+> query_cnv[[1]][[1]][, 2]          ..................para ver las columnas 
+> sum(duplicated(query_cnv[[1]][[1]][, 1]))
+[1] 0
+
+
+
+
+
+
+.........................Podemos utilizar el dataset summarizedExperiment = FALSE (cnv_data_sumExpF), pero para evitarnos filtrar las columnas que no nos interesan, utilizaremos summarizedExperiment = TRUE combinando ambos dataset.
+
+
+
+
+
+
+
+#**Checking patients**
+
+> length(unique(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16)))
+[1] 661
+> length(unique(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 20)))
+[1] 661
+> length(intersect(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16), substr(rownames(mediasCpG_genes), 1, 16)))
+[1] 661
+....................... todos los pacientes de mutations_filter4_patCpG_notABC3 estan en el dataset mediasCpG_genes y en el dataset expr_filter90
+
+Obtenemos pacientes G2 de interés: (listado de pacientes con valores CpG para el gen 2, usados para boxplot con nivel de metilación según G2)
+*El listado de pacientes con 16 caracteres no tiene repeticiones al incluir el resto de caracteres porque ya se filtraron y se comprobo previamente.*
+```{r}
+patientsG2_CpG <- unique(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode)
+#patientsG2_CpG[1:5]
+```
+
+
+
+#1.2.**Process result GDCquery**
+
+View(head(cnv_data))
+
+<!-- 
+La función t() en R se utiliza para transponer matrices y data frames, es decir, intercambiar filas por columnas. Sin embargo, met_data es un objeto de tipo SummarizedExperiment, que es una estructura de datos más compleja que un simple data frame o matriz.
+
+Se puede convertir el objeto met_data en un data frame utilizando las funciones assay() y as.data.frame().
+-->
+
+```{r}
+#assay
+cnv_assay <- assay(cnv_data)
+View(cnv_assay)
+View(t(cnv_assay))
+
+#rowRanges
+cnv_rowRangesDF <- as.data.frame(rowRanges(cnv_data))
+View(cnv_rowRangesDF)
+
+## colData
+# > cnv_colDataDF <- as.data.frame(colData(cnv_data))
+# > View(cnv_colDataDF)
+```
+
+> class(cnv_assay)
+[1] "matrix" "array"
+
+> class(cnv_rowRangesDF)
+[1] "data.frame"
+
+
+Fusionamos datasets de interes para obtener nombres de los genes con sus respectivos número de copias:
+```{r}
+cnv_total <- cbind(cnv_rowRangesDF, cnv_assay)
+
+save(cnv_total, file = "~/vlad/TFM_bioinf/DescargasDatos/cnv_total.rda")
+#load("~/vlad/TFM_bioinf/DescargasDatos/cnv_total.rda")
+```
+
+View(cnv_total)
+> class(cnv_total)
+[1] "data.frame"
+
+#>*cnv_total*
+
+
+
+
+#1.3.**Cleaning dataset** ------------------------
+
+
+## **Patients**
+
+*Limpiamos dataset* eliminando pacientes que no estan en los otros datasets.
+
+> dim(cnv_total)
+[1] 60623  1064
+
+
+> length(unique(substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16)))
+[1] 661
+
+> intersect(colnames(cnv_total), mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode)
+character(0)
+
+> length(intersect(substr(colnames(cnv_total), 1, 16), substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16)))
+[1] 632
+
+
+indices_columnas <- which(names(cnv_total) %in% nombres_coincidentes)
+
+mutations_filter4_patCpG_notABC3 <- subset(mutations_filter4_patCpG_notABC2, substr(mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode, 1, 16) %in% substr(rownames(expr_filter90), 1, 16))
+
+
+************** mutations_filter4_patCpG_notABC2$Tumor_Sample_Barcode
+colnames(cnv_total)
+```{r}
+commonSamplesTOT <- colnames(cnv_total)[substr(colnames(cnv_total), 1, 16) %in% substr(mutations_filter4_patCpG_notABC3$Tumor_Sample_Barcode, 1, 16)]
+
+
+#columnas_seleccionadas <- cnv_total[, c(1:7, commonSamplesTOT)]  ...ERROR, no se pueden seleccionar índices de columnas y nombres a la vez. Solo admite un tipo de entrada al mismo tiempo. Utilizaremos los índices:
+#indices_columnas <- which(names(cnv_total) %in% nombres_coincidentes)
+cnv_total_filter <- cnv_total[, c(1:7, which(colnames(cnv_total) %in% commonSamplesTOT))]
+dim(cnv_total_filter)
+```
+*632 + 7 = 639   .....ahora solo los pacientes de mutations_filter4_patCpG_notABC3 estan en cnv_total estan en mutations_filter4_patCpG_notABC3*
+
+View(cnv_total_filter)
+
+
+
+
+******************* rownames(expr_filter90)
+cnv_total_filter
+```{r}
+cnv_total_filter2 <- cnv_total_filter[, substr(colnames(cnv_total_filter), 1, 16) %in% substr(rownames(expr_filter90), 1, 16)]
+
+dim(cnv_total_filter2)
+```
+*632 mismo número de pacientes. Todos los pacientes de cnv_total_filter estan en rownames(expr_filter90).*
+
+
+###>*cnv_total_filter*
+
+
+
+
+
+## **Genes**
+
+#*******************General gen selection*****************************
+
+*Usado solo en Lost* En Gain hay una sección donde ser realizan las operaciones pertienentes para ese dataset.
+En esta sección se hacen las operaciones comunes y el resto de operaciones propias en Lost.
+
+
+Comprobamos genes en ambos datasets:
+```{r}
+length(cnv_total_filter$gene_name)
+sum(cnv_total_filter$gene_name %in% colnames(expr_filter90))
+```
+
+Eliminamos genes que no estan en colnames(expr_filter90):
+```{r}
+# Filtra cnv_total_filter para retener solo las filas cuyo gene_name está en colnames(expr_filter90)
+cnv_total_filter_exp <- cnv_total_filter[cnv_total_filter$gene_name %in% colnames(expr_filter90), ]
+dim(cnv_total_filter_exp)
+```
+
+###>*cnv_total_filter_exp*
+
+
+
+
+###**Get total protein code genes**
+```{r}
+library(biomaRt)
+
+# Connect to the Ensembl database and select the appropriate dataset for your species
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")  # Replace with your species
+
+# Create a vector of gene names that you want to query
+gene_protein <- cnv_total_filter_exp$gene_name  # Replace with your gene names
+
+# Use the "getBM" function to retrieve information about the genes
+gene_info <- getBM(attributes = c("hgnc_symbol", "gene_biotype"), filters = "hgnc_symbol", values = gene_protein, mart = ensembl)
+
+Total_prot_genes <- gene_info$hgnc_symbol[gene_info$gene_biotype == "protein_coding"]
+
+length(Total_prot_genes)
+```
+
+####>*Total_prot_genes*   
+                       .........es un vector
+
+
+###**Get dataset total protein code genes**
+Filtramos cnv_total_filter_exp con los genes del vector Total_prot_genes:
+```{r}
+#genesDF1_prot <- subset(cnv_total_filter_exp, gene_name %in% protein_coding_genes)
+cnv_total_filter_exp_prot <- cnv_total_filter_exp[cnv_total_filter_exp$gene_name %in% Total_prot_genes, ]
+dim(cnv_total_filter_exp)
+dim(cnv_total_filter_exp_prot)
+```
+####>*cnv_total_filter_exp_prot*
+
+```{r}
+save(cnv_total_filter_exp_prot, file = "~/vlad/TFM_bioinf/RESULTS/cnv_total_filter_exp_prot.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/cnv_total_filter_exp_prot.rda")
+```
+
+
+###**Filter duplicated genes**
+
+cnv_total_filter_exp_prot
+```{r}
+length(cnv_total_filter_exp_prot$gene_name)
+length(unique(cnv_total_filter_exp_prot$gene_name))
+sum(duplicated(cnv_total_filter_exp_prot$gene_name))
+```
+
+```{r}
+duplicated_genes_total <- cnv_total_filter_exp_prot$gene_name[duplicated(cnv_total_filter_exp_prot$gene_name)]
+cnv_total_filterS_NOdup <- subset(cnv_total_filter_exp_prot, !(gene_name %in% duplicated_genes_total))
+#cnv_total_filt_prot_NOdup <- cnv_total_filter_exp_prot[!(cnv_total_filter_exp_prot$gene_name %in% duplicated_genes_total), ]
+
+length(duplicated_genes_total)
+dim(cnv_total_filter_exp_prot)
+dim(cnv_total_filterS_NOdup)
+```
+
+####> *cnv_total_filterS_NOdup*
+
+```{r}
+save(cnv_total_filterS_NOdup, file = "~/vlad/TFM_bioinf/RESULTS/cnv_total_filterS_NOdup.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/cnv_total_filterS_NOdup.rda")
+```
+
+
+
+###**Filter genes all values NA**
+
+
+> sum(rowSums(!is.na(cnv_total_filterS_NOdup[, 8:ncol(cnv_total_filterS_NOdup)])) > 0)
+[1] 11795
+
+
+```{r}
+cnv_total_filterS_NOdup_notNA <- cnv_total_filterS_NOdup[rowSums(!is.na(cnv_total_filterS_NOdup[, 8:ncol(cnv_total_filterS_NOdup)])) > 0, ]
+
+dim(cnv_total_filterS_NOdup_notNA)
+```
+
+
+####> *cnv_total_filterS_NOdup_notNA*
+........................................= genes_not2CN
+
+```{r}
+save(cnv_total_filterS_NOdup_notNA, file = "~/vlad/TFM_bioinf/RESULTS/cnv_total_filterS_NOdup_notNA.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/cnv_total_filterS_NOdup_notNA")
+```
+
+
+
+
+###**Selec genes >= 20 patients != 2 CN**
+
+Genes totales con al menos 20 pacientes con valores diferentes a 2 (número normal de copias)
+```{r}
+columsPatients <- cnv_total_filterS_NOdup_notNA[, 8:ncol(cnv_total_filterS_NOdup_notNA)]
+genes_not2CN <- cnv_total_filterS_NOdup_notNA[rowSums(columsPatients != 2 & !is.na(columsPatients)) >= 20, ]
+
+dim(cnv_total_filterS_NOdup_notNA)
+dim(genes_not2CN)
+```
+
+*genes_not2CN* ...............= cnv_total_filterS_NOdup_notNA
+
+
+#*************************************************************
+
+
+
+
+# -----------**2. Analising Select genes >=20**
+
+*Select genes >=20 patients whit copy number*
+
+
+
+#2.3. **Gain**
+
+****************************************************
+***********************************
+
+cnv_total_filterS_NOdup_notNA
+```{r}
+columsPatients <- cnv_total_filterS_NOdup_notNA[, 8:ncol(cnv_total_filterS_NOdup_notNA)]
+#selected_g <- cnv_total_filterS_NOdup_notNA[rowSums(columsPatients > 2 & !is.na(columsPatients)) >= 20, "gene_name"]
+cnv_total_filterS_not_more2 <- cnv_total_filterS_NOdup_notNA[rowSums(columsPatients > 2, na.rm = TRUE) >= 20, ]
+
+dim(cnv_total_filterS_NOdup_notNA)
+dim(cnv_total_filterS_not_more2)
+```
+..............mismo número de genes para el dataset filtrado y genes con mas de dos copias en al menos 20 pacientes.
+
+**********************************
+****************************************************
+
+
+
+
+
+
+#---------------------------- cnv_total_filter
+*Not filter by protein coding genes*
+Dataset con todos los genes para proteinas.
+
+# **Genes >=20 patients with values >2**
+*Not filter by protein coding genes, cnv_total_filter*
+
+```{r}
+columsPatients <- cnv_total_filter[, 8:ncol(cnv_total_filter)]
+#cnv_total_filter[rowSums(columsPatients > 2 & !is.na(columsPatients)) >= 20, ]
+#cnv_total_filter[rowSums(columsPatients > 2 & !is.na(columsPatients)), "gene_name"]
+#cnv_total_filter[rowSums(patient_data != 2 & !is.na(patient_data)) >= 20, "gene_name"]
+selected_g <- cnv_total_filter[rowSums(columsPatients > 2 & !is.na(columsPatients)) >= 20, "gene_name"]
+
+length(selected_g)
+dim(cnv_total_filter)
+#dim(selected_rows)
+```
+
+[1] 57224
+[1] 60623   639
+[1] 57224   639
+
+....................Ordenamos genes decrecientemente según el número de veces que cumplan la condición:
+
+
+# **Genes >=20 patients copy number x:**
+*Not filter by protein coding genes*
+```{r}
+columsPatients <- cnv_total_filter[, 8:ncol(cnv_total_filter)] ######################
+
+selected_genes2 <- cnv_total_filter[rowSums(columsPatients = 2 & !is.na(columsPatients)) >= 20, "gene_name"]
+selected_genes3 <- cnv_total_filter[rowSums(columsPatients > 3 & !is.na(columsPatients)) >= 20, "gene_name"]
+selected_genes4 <- cnv_total_filter[rowSums(columsPatients > 4 & !is.na(columsPatients)) >= 20, "gene_name"]
+selected_genes5 <- cnv_total_filter[rowSums(columsPatients > 5 & !is.na(columsPatients)) >= 20, "gene_name"]
+selected_genes6 <- cnv_total_filter[rowSums(columsPatients > 6 & !is.na(columsPatients)) >= 20, "gene_name"]
+selected_genes7 <- cnv_total_filter[rowSums(columsPatients > 7 & !is.na(columsPatients)) >= 20, "gene_name"]
+
+
+print(paste("Total genes in CNV dataset are", length(cnv_total_filter$gene_name)))
+print(paste("Total not repeated genes in CNV dataset are", length(unique(cnv_total_filter$gene_name))))
+
+print(paste("Total genes >=20 patients >2 gene copies",length(selected_genes2)))
+print(paste("Total genes >=20 patients >3 gene copies",length(selected_genes3)))
+print(paste("Total genes >=20 patients >4 gene copies",length(selected_genes4)))
+print(paste("Total genes >=20 patients >5 gene copies",length(selected_genes5)))
+print(paste("Total genes >=20 patients >6 gene copies",length(selected_genes6)))
+print(paste("Total genes >=20 patients >7 gene copies",length(selected_genes7)))
+#dim(selected_rows)
+```
+  
+[1] "Total genes >=20 patients >3 gene copies 56722"
+[1] "Total genes >=20 patients >4 gene copies 35347"
+[1] "Total genes >=20 patients >5 gene copies 12450"
+[1] "Total genes >=20 patients >6 gene copies 5829"
+[1] "Total genes >=20 patients >7 gene copies 0"
+
+
+
+
+# **Get genes >2 cnv ordered by patients**
+```{r}
+columsPatients <- cnv_total_filter[, 8:ncol(cnv_total_filter)]
+
+gene_counts <- rowSums(columsPatients > 2, na.rm = TRUE)
+selected_genes <- cnv_total_filter$gene_name
+genesDF_gain <- data.frame(gene_name = selected_genes, count = gene_counts)
+
+```
+
+
+
+## **Histogram frecuency genes >2 cnv**
+*Not filter by protein coding genes*
+```{r}
+# histograma con las frecuencias de los genes según el número de veces que aparecen (número genes eje y / número de veces que tienen valores >2 eje x)   ....por ejemplo: En la última barra vemos que hay unos 400 genes que tienen 500 veces valores superiores a 2.
+
+# Filtrar los genes con recuento mayor que cero para visualizar correctamente
+filtered_result <- genesDF_gain[genesDF_gain$count > 0, ]
+# Crear un histograma con los genes filtrados
+hist(filtered_result$count, breaks = 500, col = "blue", 
+     ylab = "Nº de genes >2 copies", xlab = "Nº patients >2 copies per gene", 
+     main = "Frequency of genes by number of patients >2 copies",
+     ylim = c(0, 800))
+```
+
+
+
+
+
+
+
+
+
+#-----------------Group1---------------------------------
+
+#**Get Gain protein Genes >2 cnv group1**
+*Comprobamos grupo 1 compuesto por genes con >2 copias en casi todos los pacientes.*
+
+View(genesDF)
+```{r}
+#sorted_count_6 <- genesDF[order(genesDF$count_6, decreasing = TRUE), "count_6", drop = FALSE]
+sorted_count_2 <- genesDF[order(genesDF$count_2, decreasing = TRUE), c("gene_name", "count_2")]
+View(sorted_count_2)
+#sorted_count_2[200,]
+```
+
+8224 UTP23 403
+1107 OTUD7B 476  ...........entre estos genes/nº pacientes encontramos muy pocos genes.   
+
+
+```{r}
+# Seleccionar los nombres de genes con un valor superior a 476 en count_2
+genesCNV_gain2_group1 <- sorted_count_2$gene_name[sorted_count_2$count_2 > 476]
+```
+
+> length(genesCNV_gain2_group1)
+[1] 830
+
+##>*genesCNV_gain2_group1* 
+
+
+
+
+## **Identificamos cromosomas de los genes group1**
+
+```{r}
+table(cnv_total_filt_prot_NOdup$seqnames[cnv_total_filt_prot_NOdup$gene_name %in% genesCNV_gain2_group1])
+```
+
+Dataset genes en vector:
+>View(cnv_total_filt_prot_NOdup[cnv_total_filt_prot_NOdup$gene_name %in% genesCNV_gain2_group1, ])
+
+Todos los genes se encuentran entre: 150149183 - 247622372            
+
+Nuestros datos son: CNV level 3 data from TCGA to identify recurrent alterations in cancer genome from SNP array (Affymetrix Genome-Wide Human SNP Array 6.0).
+
+
+
+## **Bibliografía**
+Existe una amplia bibliografía respecto a cnv en el cromosoma 1 tanto para el cáncer de pecho como para el cáncer en general:
+
+*Classical cytogenetic studies in breast cancer have identified frequent chromosomal aberrations that produce an increased gene copy number in chromosome 1q (1q-gain) and/or a decreased gene copy number in 16q (16q-loss).*
+Privitera AP, Barresi V, Condorelli DF. Aberrations of Chromosomes 1 and 16 in Breast Cancer: A Framework for Cooperation of Transcriptionally Dysregulated Genes. Cancers (Basel). 2021 Mar 30;13(7):1585. doi: 10.3390/cancers13071585. PMID: 33808143; PMCID: PMC8037453.
+
+
+# **Get significant genes group1**
+*En los genes del grupo 1 (830 genes del cromosoma 1 (q1)), comparamos la expresión de los pacientes cnv normal vs cnv>2 para determinar aquellos en los que el cnv sea significativo.*
+
+
+## **Previos**
+
+******************************************** Genes colnames(expr_filter90):
+
+View(cnv_total_filt_prot_NOdup[cnv_total_filt_prot_NOdup$gene_name == "CIART", ])
+
+> "ABCB10" %in% colnames(expr_filter90)
+[1] TRUE
+
+> "CIART" %in% colnames(expr_filter90)
+[1] FALSE
+
+Comprobamos que los genes de genesCNV_gain2_group1 esten en el dataset expr_filter90 (columnas):
+```{r}
+length(genesCNV_gain2_group1)
+genesCNV_gain2_group1_ambos <- genesCNV_gain2_group1[genesCNV_gain2_group1 %in% colnames(expr_filter90)]
+length(genesCNV_gain2_group1_ambos)
+```
+[1] 830
+[1] 535
+.................535 genes en ambos datasets
+
+###>*genesCNV_gain2_group1_ambos*
+
+
+
+
+******************************************** Pacientes colnames(expr_filter90): *Hecho en 1.2 Limpiamos dataset*
+Comprobamos que los pacientes de rownames(cnv_total_filt_prot_NOdup) esten en el dataset colnames(expr_filter90):
+
+
+## **All Genes**
+
+
+grupo 1 compuesto por genes diferenciados por presentar >2 copias en casi todos los pacientes:
+genesCNV_gain2_group1 ............genes con un valor superior a 476 en count_2 (>2CN)
+genesCNV_gain2_group1_ambos ..... genes de genesCNV_gain2_group1 esten en el dataset expr_filter90 (columnas)
+
+
+
+3:7  exact   .........valores exactos en el CN. Un grupo para cada CN. cnv normal vs cnv>x.
+```{r}
+dataset_genes <- cnv_total_filt_prot_NOdup[cnv_total_filt_prot_NOdup$gene_name %in% genesCNV_gain2_group1_ambos, ]
+
+# Obtén las columnas de pacientes
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+
+# Inicializa un dataframe vacío para almacenar los resultados
+group1_DF_resultFC2 <- data.frame(row.names = dataset_genes$gene_name, stringsAsFactors = FALSE)
+
+for (cnv_number in 3:7) {
+  
+  # Crea nombres de columnas específicos para cada valor de cnv_number
+  pvalue_col <- paste("pvalue_", cnv_number, sep = "")
+  foldchanges_col <- paste("foldchanges_", cnv_number, sep = "")
+  
+  # Itera sobre cada gen 
+  for (gen_actual in dataset_genes$gene_name) {
+    
+    # Encuentra el índice de la fila donde el gen es el actual
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+    
+    # Obtén los pacientes con valores mayores a ........ x
+    patients_mayor2 <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+    
+    
+    # Calculate pvalue only if there are at least 20 patients with values greater than x
+    if (length(patients_mayor2) >= 20) {
+      
+      # Obtén los pacientes con valores iguales a 2 para el gen actual
+      patients_igual2 <- colnames(col_patients_dataset_genes)[col_patients_dataset_genes[indice_gen, ] == 2]
+      
+      # Expresión de todos los pacientes para el gen actual
+      allExprEqual2 <- log2(expr_filter90[substr(patients_igual2, 1, 16), gen_actual] + 1)
+      allExprMore2 <- log2(expr_filter90[substr(patients_mayor2, 1, 16), gen_actual] + 1)
+      
+      # Calculate pvalue
+      pvalue <- t.test(allExprEqual2, allExprMore2)$p.value
+      # Calcula el cambio plegado para el gen actual
+      foldchangesActual <- mean(allExprMore2, na.rm = TRUE) - mean(allExprEqual2, na.rm = TRUE)
+      
+    } else {
+      # Si hay menos de 20 pacientes, asigna NA a pvalue y foldchangesActual
+      pvalue <- NA
+      foldchangesActual <- NA
+    }
+    
+    # Añade los resultados al dataframe en las columnas específicas
+    group1_DF_resultFC2[gen_actual, pvalue_col] <- pvalue
+    group1_DF_resultFC2[gen_actual, foldchanges_col] <- foldchangesActual
+    
+  }
+}
+
+View(group1_DF_resultFC2)
+```
+
+###>*group1_DF_resultFC2*
+
+```{r}
+save(group1_DF_resultFC2, file = "~/vlad/TFM_bioinf/RESULTS/group1_DF_resultFC2.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/group1_DF_resultFC2.rda")
+```
+
+
+###**Filtramos resultado**
+
+
+ bucle OK
+```{r}
+dataframe <- group1_DF_resultFC2
+
+length(genesCNV_gain2_group1_ambos)
+dim(group1_DF_resultFC2)
+
+for (cnv_number in 3:7) {
+
+  # Crea nombres de columnas específicos para cada valor de cnv_number
+  pvalue_col <- paste("pvalue_", cnv_number, sep = "")
+  foldchanges_col <- paste("foldchanges_", cnv_number, sep = "")
+
+  subset_dimensions <- 
+    dim(dataframe[dataframe[, pvalue_col] < 0.05 & abs(dataframe[, foldchanges_col]) > log2(1.25), ])
+  
+  # dim(subset(group1_DF_resultFC2, pvalue_col < 0.05))
+  # dim(subset(group1_DF_resultFC2, pvalue_col < 0.05 & abs(foldchanges_col) > log2(1.25)))
+  
+  #group1_DF_resultFC2[group1_DF_resultFC2[, pvalue_col] < 0.05, ]
+  # dim(subset(dataframe, dataframe[, pvalue_col] < 0.05 & abs(dataframe[, foldchanges_col]) > log2(1.25)))
+  
+  cat("In cnv_number =", cnv_number, "there are", subset_dimensions[1], "genes whit pvalue <0.05 and foldchanges >log2(1.25).\n")
+}
+```
+
+abs(foldchanges_x) > log2(1.25)
+```{r}
+length(genesCNV_gain2_group1_ambos)
+dim(group1_DF_resultFC2)
+cat("\n")
+dim(subset(group1_DF_resultFC2, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(1.25)))
+dim(subset(group1_DF_resultFC2, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(1.25)))
+dim(subset(group1_DF_resultFC2, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(1.25)))
+dim(subset(group1_DF_resultFC2, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(1.25)))
+dim(subset(group1_DF_resultFC2, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(1.25)))
+```
+[1] 535
+[1] 535  genes in group 1
+
+[1] 165  
+[1] 318  
+[1] 349  
+[1] 341  
+[1] 402  
+
+```{r}
+genes_group1_3CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(1.25)))
+genes_group1_4CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(1.25)))
+genes_group1_5CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(1.25)))
+genes_group1_6CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(1.25)))
+genes_group1_7CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(1.25)))
+```
+####>*genes_group1_xCN_selec*
+
+
+*El número de genes con valores significativos aumenta junto con el número de copias*
+Aplicamos otro criterio de selección:
+
+abs(foldchanges_3) >= log2(3/2*0.8)
+```{r}
+dim(subset(group1_DF_resultFC2, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8)))
+dim(subset(group1_DF_resultFC2, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8)))
+dim(subset(group1_DF_resultFC2, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8)))
+dim(subset(group1_DF_resultFC2, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8)))
+dim(subset(group1_DF_resultFC2, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8)))
+```
+[1] 275  10
+[1] 22   10
+[1]  5   10
+[1] 10   10
+[1]  7   10
+
+
+
+
+
+###**Número de genes por nivel CN**
+cnv_total_filterS_NOdup_notNA
+genesCNV_gain2_group1_ambos
+
+Creamos df con la selección de genes "genesCNV_gain2_group1_ambos":
+```{r}
+cnv_DFgenes_group1 <- cnv_total_filterS_NOdup_notNA[cnv_total_filterS_NOdup_notNA$gene_name %in% genesCNV_gain2_group1_ambos, ]
+dim(cnv_total_filterS_NOdup_notNA)
+dim(cnv_DFgenes_group1)
+```
+
+Numero genes con al menos 20 pacientes con un determinado número de copias:
+```{r}
+dataset_genes <- cnv_DFgenes_group1
+columsPatients <- dataset_genes[, 8:ncol(dataset_genes)]
+
+length(dataset_genes[rowSums(columsPatients == 2 & !is.na(columsPatients)) >= 20, "gene_name"])
+length(dataset_genes[rowSums(columsPatients == 3 & !is.na(columsPatients)) >= 20, "gene_name"])
+length(dataset_genes[rowSums(columsPatients == 4 & !is.na(columsPatients)) >= 20, "gene_name"])
+length(dataset_genes[rowSums(columsPatients == 5 & !is.na(columsPatients)) >= 20, "gene_name"])
+length(dataset_genes[rowSums(columsPatients == 6 & !is.na(columsPatients)) >= 20, "gene_name"])
+length(dataset_genes[rowSums(columsPatients == 7 & !is.na(columsPatients)) >= 20, "gene_name"])
+
+```
+Todos los genes tienen al menos 20 pacientes en cada número de copias.
+
+
+Con bucle:
+```{r}
+dataset_genes <- cnv_DFgenes_group1
+  
+# Obtén las columnas de pacientes
+columsPatients <- dataset_genes[, 8:ncol(dataset_genes)]
+
+# # Inicializa una lista para almacenar los resultados
+# selected_genes_list <- list()
+
+# Itera sobre cada rango de copias
+for (copies in 1:7) {
+  # Filtra los genes que cumplen con la condición
+  selected_genes <- dataset_genes[rowSums(columsPatients == copies & !is.na(columsPatients)) >= 20, "gene_name"]
+  
+  # # Almacena los resultados en la lista
+  # selected_genes_list[[as.character(copies)]] <- selected_genes
+  
+  # Imprime el total de genes en el rango actual
+  print(paste("Total genes >= 20 patients =", copies, "gene copies:", length(selected_genes)))
+}
+
+# Imprime información general
+print(paste("Total genes in CNV dataset are", length(dataset_genes$gene_name)))
+print(paste("Total not repeated genes in CNV dataset are", length(unique(dataset_genes$gene_name))))
+```
+
+
+
+
+
+
+
+
+#----------------Protein filter exp--------------------------------
+Genes filtrados que codifican para proteinas.
+
+# **LOOP Gene/nºpatients CN>=i**
+*LOOP 2-6 CNV protein filtEXP*
+.......................................CN>i
+
+*cnv_total_filterS_NOdup_notNA* = cnv_total_prot_filtEXP_NOdup.
+```{r}
+dataset_genes <- cnv_total_prot_filtEXP_NOdup
+
+# Crear listas para almacenar histogramas y resultados
+histograms <- list()
+
+# Creamos objetos a usar
+columsPatients <- dataset_genes[, 8:ncol(dataset_genes)]
+
+
+
+genesDF <- data.frame(gene_name = dataset_genes$gene_name)  
+
+for (i in 2:6) {
+  gene_counts <- rowSums(columsPatients > i, na.rm = TRUE)
+  column_name <- paste("count_", i, sep = "")
+  genesDF[[column_name]] <- gene_counts
+
+  # Calcular y guardar el resultado
+  result_text <- paste("Total protein code genes >=20 patients and >", i, "gene copies is", sum(genesDF[[column_name]] >= 20))
+ 
+  # Filtrar los genes con recuento mayor que cero para visualizar correctamente
+  filtered_result <- genesDF[genesDF[[column_name]] > 19, ]
+
+  # Crear valores ejes y nº barras
+  y_value <- max(table(filtered_result[[column_name]])) # Altura eje y
+  number_bars <- max(genesDF[[column_name]]) - min(genesDF[[column_name]]) # number bars
+  
+  # Crear un histograma con los genes filtrados y guardar en la lista
+  histograms[[i]] <- hist(filtered_result[[column_name]], breaks = number_bars, col = "blue",
+       ylab = paste("Nº de genes >", i, "copies"), 
+       xlab = paste("Nº patients >", i, "copies per gene"),
+       sub = result_text,
+       main = paste("Frequency of genes by number of patients >", i, "copies"),
+       ylim = c(0, y_value))
+}
+
+# # Mostrar todos los histogramas
+# for (i in 2:6) {
+#   print(histograms[[i]])
+# }
+for (i in 2:6) {
+  if (class(histograms[[i]]) == "hist") {
+    print(histograms[[i]])
+  }
+}
+```
+
+```{r}
+genesDFprot_filtEXP <- genesDF
+
+save(genesDFprot_filtEXP, file = "~/vlad/TFM_bioinf/RESULTS/genesDFprot_filtEXP.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/genesDFprot_filtEXP.rda")
+```
+View(genesDFprot_filtEXP)
+
+###>*genesDFprot_filtEXP*
+
+
+
+###**Total Histogram**
+
+```{r}
+filtered_result <- genesDFprot_filtEXP
+par(mar = c(5, 5, 4, 2) + 0.1)
+
+hist(filtered_result$count_2, breaks = number_bars, col = "blue", border = NA,
+     ylab = paste("Nº de genes >", i, "copies"), 
+     xlab = paste("Nº patients >", i, "copies per gene"),
+     #sub = result_text,
+     main = paste("Frequency of genes by number of patients >", i, "copies"),
+     ylim = c(0, y_value),
+     xlim = c(0, max(filtered_result[[column_name]])), # Ajuste del eje X para comenzar en 0
+     cex.main = 1.5,  # Tamaño del título principal
+     cex.lab = 1.8,   # Tamaño de las etiquetas de los ejes
+     cex.axis = 1.6)  # Tamaño de los números en los ejes
+
+paste("Total protein code genes >=20 patients and >", i, "gene copies is", sum(genesDF[[column_name]] >= 20))
+```
+
+
+Modificado para grupo 1 en rojo.
+```{r}
+par(mar = c(5, 5, 4, 2) + 0.1)
+
+# Generar los datos del histograma sin graficarlo
+hist_data <- hist(filtered_result$count_2, breaks = number_bars, plot = FALSE)
+
+# Determinar los colores de las barras
+colors <- ifelse(hist_data$mids > 473, "red", "blue") # El componente mids es útil cuando se desea  modificar las barras del histograma en función de su posición en el eje x.
+
+# Graficar el histograma con los colores ajustados
+plot(hist_data, col = colors, border = NA,
+     ylab = paste("Nº genes >", i, "copies"), 
+     xlab = paste("Nº patients"),
+     main = paste("Frequency of genes by number of patients >", i, "copies"),
+     ylim = c(0, y_value),
+     xlim = c(0, max(filtered_result[[column_name]])), # Ajuste del eje X para comenzar en 0
+     cex.main = 1.5,  # Tamaño del título principal
+     cex.lab = 1.8,   # Tamaño de las etiquetas de los ejes
+     cex.axis = 1.6)  # Tamaño de los números en los ejes
+
+paste("Total protein code genes >=20 patients and >", i, "gene copies is", sum(genesDF[[column_name]] >= 20))
+
+```
+
+
+
+### **Identifying chromosomes from genes**
+
+```{r}
+#table(cnv_total_prot_filtEXP_NOdup$seqnames[cnv_total_prot_filtEXP_NOdup$gene_name %in% genesCNV_gain2_group1])
+table(cnv_total_prot_filtEXP_NOdup$seqnames)
+```
+
+
+
+## **Number genes >20 patients and >= cn**
+
+```{r}
+dataset_genes <- cnv_total_prot_filtEXP_NOdup
+  
+# Obtén las columnas de pacientes
+columsPatients <- dataset_genes[, 8:ncol(dataset_genes)]
+
+# # Inicializa una lista para almacenar los resultados
+# selected_genes_list <- list()
+
+# Itera sobre cada rango de copias
+for (copies in 2:6) {
+  # Filtra los genes que cumplen con la condición
+  selected_genes <- dataset_genes[rowSums(columsPatients > copies & !is.na(columsPatients)) >= 20, "gene_name"]
+  
+  # # Almacena los resultados en la lista
+  # selected_genes_list[[as.character(copies)]] <- selected_genes
+  
+  # Imprime el total de genes en el rango actual
+  print(paste("Total genes >= 20 patients =", copies, "gene copies:", length(selected_genes)))
+}
+
+# Imprime información general
+print(paste("Total genes in CNV dataset are", length(dataset_genes$gene_name)))
+print(paste("Total not repeated genes in CNV dataset are", length(unique(dataset_genes$gene_name))))
+```
+
+
+[1] "Total genes >= 20 patients = 2 gene copies: 11795"
+[1] "Total genes >= 20 patients = 3 gene copies: 11691"
+[1] "Total genes >= 20 patients = 4 gene copies: 7457"
+[1] "Total genes >= 20 patients = 5 gene copies: 2681"
+[1] "Total genes >= 20 patients = 6 gene copies: 1282"
+[1] "Total genes in CNV dataset are 11795"
+[1] "Total not repeated genes in CNV dataset are 11795"
+
+
+
+
+
+
+
+
+## **Get pval/FC LOOP CN >= x**
+
+*condition 20 patients + 3-7 cnv + CN >= x*
+```{r}
+dataset_genes <- cnv_total_prot_filtEXP_NOdup
+
+# Obtén las columnas de pacientes
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+  
+# Inicializa un dataframe vacío para almacenar los resultados
+total_prot_DF_resultFC26_exact <- data.frame(row.names = dataset_genes$gene_name, stringsAsFactors = FALSE)
+
+for (cnv_number in 3:7) {
+  
+  # Crea nombres de columnas específicos para cada valor de cnv_number
+  pvalue_col <- paste("pvalue_", cnv_number, sep = "")
+  foldchanges_col <- paste("foldchanges_", cnv_number, sep = "")
+  
+  # Itera sobre cada gen 
+  for (gen_actual in dataset_genes$gene_name) {
+    
+    # Encuentra el índice de la fila donde el gen es el actual
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+  
+    # Obtén los pacientes con valores mayores a ........ x
+    patients_mayor2 <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] >= cnv_number)]
+  
+    
+    # Calculate pvalue only if there are at least 20 patients with values greater than x
+    if (length(patients_mayor2) >= 20) {
+      
+      # Obtén los pacientes con valores iguales a 2 para el gen actual
+      patients_igual2 <- colnames(col_patients_dataset_genes)[col_patients_dataset_genes[indice_gen, ] == 2]
+  
+      # Expresión de todos los pacientes para el gen actual
+      allExprEqual2 <- log2(expr_filter90[substr(patients_igual2, 1, 16), gen_actual] + 1)
+      allExprMore2 <- log2(expr_filter90[substr(patients_mayor2, 1, 16), gen_actual] + 1)
+      
+      # Calculate pvalue
+      pvalue <- t.test(allExprEqual2, allExprMore2)$p.value
+      # Calcula el cambio plegado para el gen actual
+      foldchangesActual <- mean(allExprMore2, na.rm = TRUE) - mean(allExprEqual2, na.rm = TRUE)
+      
+    } else {
+      # Si hay menos de 20 pacientes, asigna NA a pvalue y foldchangesActual
+      pvalue <- NA
+      foldchangesActual <- NA
+    }
+
+    # Añade los resultados al dataframe en las columnas específicas
+    total_prot_DF_resultFC26_exact[gen_actual, pvalue_col] <- pvalue
+    total_prot_DF_resultFC26_exact[gen_actual, foldchanges_col] <- foldchangesActual
+    
+  # # Añade los resultados al dataframe
+  # total_prot_DF_resultFC[gen_actual, "pvalue"] <- pvalue
+  # total_prot_DF_resultFC[gen_actual, "foldchangesActual"] <- foldchangesActual
+}
+}
+
+View(total_prot_DF_resultFC26)
+```
+
+######>*total_prot_DF_resultFC26*      
+.........................................valores de selección >x (en exact es =x)
+```{r}
+save(total_prot_DF_resultFC26, file = "~/vlad/TFM_bioinf/RESULTS/total_prot_DF_resultFC26.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/total_prot_DF_resultFC26.rda")
+```
+
+Filtramos resultado (pval <0.05) total_prot_DF_resultFC26 log2(1.25)
+CN>x, abs(foldchanges_3) > log2(1.25)
+```{r}
+dim(total_prot_DF_resultFC26)
+
+dim(subset(total_prot_DF_resultFC26, pvalue_3 < 0.05 & abs(foldchanges_3) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26, pvalue_4 < 0.05 & abs(foldchanges_4) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26, pvalue_5 < 0.05 & abs(foldchanges_5) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26, pvalue_6 < 0.05 & abs(foldchanges_6) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26, pvalue_7 < 0.05 & abs(foldchanges_7) > log2(1.25)))
+```
+
+(pval <0.05) and log2(cnv/2*0.8) total_prot_DF_resultFC26
+```{r}
+dim(total_prot_DF_resultFC26)
+
+dim(subset(total_prot_DF_resultFC26, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8)))
+dim(subset(total_prot_DF_resultFC26, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8)))
+dim(subset(total_prot_DF_resultFC26, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8)))
+dim(subset(total_prot_DF_resultFC26, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8)))
+dim(subset(total_prot_DF_resultFC26, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8)))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# **LOOP Gene/nºpatients CN=i (EXACT)**
+*LOOP 2-6 CNV protein filtEXP EXACT*
+
+*cnv_total_filterS_NOdup_notNA* ...... igual a cnv_total_prot_filtEXP_NOdup.
+
+##**Get Histograms**
+```{r}
+#dataset_genes <- cnv_total_prot_filtEXP_NOdup
+dataset_genes <- cnv_total_filterS_NOdup_notNA
+
+# Crear listas para almacenar histogramas y resultados
+histograms <- list()
+
+# Creamos objetos a usar
+columsPatients <- dataset_genes[, 8:ncol(dataset_genes)]
+
+
+
+genesDF <- data.frame(gene_name = dataset_genes$gene_name)  
+
+for (i in 2:7) {
+  gene_counts <- rowSums(columsPatients == i, na.rm = TRUE)
+  column_name <- paste("count_", i, sep = "")
+  genesDF[[column_name]] <- gene_counts
+
+  # Calcular y guardar el resultado
+  result_text <- paste("Total protein code genes >=20 patients and ", i, "gene copies is", sum(genesDF[[column_name]] >= 20))
+ 
+  # Filtrar los genes con recuento mayor que 
+  filtered_result <- genesDF[genesDF[[column_name]] > 19, ]
+
+  # Crear valores ejes y nº barras
+  y_value <- max(table(filtered_result[[column_name]])) # Altura eje y
+  number_bars <- max(genesDF[[column_name]]) - min(genesDF[[column_name]]) # number bars
+  
+  # Crear un histograma con los genes filtrados y guardar en la lista
+  histograms[[i]] <- hist(filtered_result[[column_name]], breaks = number_bars, col = "blue",
+       ylab = paste("Nº de genes with", i, "copies"), xlab = paste("Nº patients =", i, "copies per gene"),
+       sub = result_text,
+       main = paste("Frequency of genes by number of patients with", i, "copies per gene"),
+       ylim = c(0, y_value))
+}
+
+# # Mostrar todos los histogramas
+# for (i in 2:6) {
+#   print(histograms[[i]])
+# }
+for (i in 2:6) {
+  if (class(histograms[[i]]) == "hist") {
+    print(histograms[[i]])
+  }
+}
+```
+
+
+## **Get pval/FC LOOP CN=i**
+*condition 20 patients + 3-7 cnv EXACT*
+```{r}
+dataset_genes <- cnv_total_prot_filtEXP_NOdup
+
+# Obtén las columnas de pacientes
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+  
+# Inicializa un dataframe vacío para almacenar los resultados
+total_prot_DF_resultFC26_exact <- data.frame(row.names = dataset_genes$gene_name, stringsAsFactors = FALSE)
+
+for (cnv_number in 3:7) {
+  
+  # Crea nombres de columnas específicos para cada valor de cnv_number
+  pvalue_col <- paste("pvalue_", cnv_number, sep = "")
+  foldchanges_col <- paste("foldchanges_", cnv_number, sep = "")
+  
+  # Itera sobre cada gen 
+  for (gen_actual in dataset_genes$gene_name) {
+    
+    # Encuentra el índice de la fila donde el gen es el actual
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+  
+    # Obtén los pacientes con valores mayores a ........ x
+    patients_mayor2 <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+  
+    
+    # Calculate pvalue only if there are at least 20 patients with values greater than x
+    if (length(patients_mayor2) >= 20) {
+      
+      # Obtén los pacientes con valores iguales a 2 para el gen actual
+      patients_igual2 <- colnames(col_patients_dataset_genes)[col_patients_dataset_genes[indice_gen, ] == 2]
+  
+      # Expresión de todos los pacientes para el gen actual
+      allExprEqual2 <- log2(expr_filter90[substr(patients_igual2, 1, 16), gen_actual] + 1)
+      allExprMore2 <- log2(expr_filter90[substr(patients_mayor2, 1, 16), gen_actual] + 1)
+      
+      # Calculate pvalue
+      pvalue <- t.test(allExprEqual2, allExprMore2)$p.value
+      # Calcula el cambio plegado para el gen actual
+      foldchangesActual <- mean(allExprMore2, na.rm = TRUE) - mean(allExprEqual2, na.rm = TRUE)
+      
+    } else {
+      # Si hay menos de 20 pacientes, asigna NA a pvalue y foldchangesActual
+      pvalue <- NA
+      foldchangesActual <- NA
+    }
+
+    # Añade los resultados al dataframe en las columnas específicas
+    total_prot_DF_resultFC26_exact[gen_actual, pvalue_col] <- pvalue
+    total_prot_DF_resultFC26_exact[gen_actual, foldchanges_col] <- foldchangesActual
+    
+  # # Añade los resultados al dataframe
+  # total_prot_DF_resultFC[gen_actual, "pvalue"] <- pvalue
+  # total_prot_DF_resultFC[gen_actual, "foldchangesActual"] <- foldchangesActual
+}
+}
+
+View(total_prot_DF_resultFC26_exact)
+```
+
+######>*total_prot_DF_resultFC26_exact*
+
+```{r}
+save(total_prot_DF_resultFC26_exact, file = "~/vlad/TFM_bioinf/RESULTS/total_prot_DF_resultFC26_exact.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/total_prot_DF_resultFC26_exact.rda")
+```
+
+Contar valores NA en cada columna:
+```{r}
+colSums(is.na(total_prot_DF_resultFC26_exact))
+```
+
+
+valores negativos en cada columna
+```{r}
+# Obtener las columnas relevantes
+relevant_columns <- grep("^foldchanges_.$", colnames(total_prot_DF_resultFC26_exact))
+
+# Crear un vector con el número de veces que hay valores negativos en cada columna relevante
+neg_count_vector <- sapply(total_prot_DF_resultFC26_exact[, relevant_columns], function(col) sum(col < 0, na.rm = TRUE))
+
+# Mostrar el resultado
+print(neg_count_vector)
+```
+
+
+Filtramos resultado (pval <0.05) total_prot_DF_resultFC26_exact log2(1.25)
+```{r}
+dim(total_prot_DF_resultFC26_exact)
+
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_3 < 0.05 & abs(foldchanges_3) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_4 < 0.05 & abs(foldchanges_4) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_5 < 0.05 & abs(foldchanges_5) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_6 < 0.05 & abs(foldchanges_6) > log2(1.25)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_7 < 0.05 & abs(foldchanges_7) > log2(1.25)))
+```
+[1] 11795    10
+[1] 1473   10
+[1] 3019   10
+[1] 2037   10
+[1] 1083   10
+[1] 1013   10
+
+*El número de genes con valores significativos aumenta junto con el número de copias hasta 4CN y luego decrece hasta 6CN, donde la distribución de los genes entre el número de pacientes es menor.*
+Aplicamos otro criterio de selección:
+
+
+*Dividimos el CN entre 2 y multiplicamos por 0.8 para así obtener el 80% del valor esperado.*
+
+> log2(3/2*0.8)
+[1] 0.2630344
+> log2(1.25)
+[1] 0.3219281
+
+(pval <0.05) and log2(cnv/2*0.8) total_prot_DF_resultFC26_exact
+```{r}
+dim(total_prot_DF_resultFC26_exact)
+cat("\n")
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8)))
+```
+[1] 11795    10
+
+[1] 2180   18%    11733  
+[1] 306    2,6%   11669 
+[1] 116    3,3%   3447
+[1] 53     3,4%   1530
+[1] 208    16%    1271
+
+............porcentajes de valores significativos en cada CN respecto a genes con CN exact (ver abajo)
+
+EXACT:
+[1] "Total genes >= 20 patients = 3 gene copies: 11733"
+[1] "Total genes >= 20 patients = 4 gene copies: 11669"
+[1] "Total genes >= 20 patients = 5 gene copies: 3447"
+[1] "Total genes >= 20 patients = 6 gene copies: 1530"
+[1] "Total genes >= 20 patients = 7 gene copies: 1271"
+[1] "Total genes in CNV dataset are 11795"
+[1] "Total not repeated genes in CNV dataset are 11795"
+
+
+*................Hay un salto en cuanto al número de valores significativos desde 6CN  7CN*
+En los histogramas, el número máximo de pacientes con repeticiones para un grupo de genes, decrecía en 6CN.
+
+
+
+
+
+
+```{r}
+genes_3CN_selec <- rownames(subset(total_prot_DF_resultFC26_exact, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8)))
+rownames(subset(total_prot_DF_resultFC26_exact, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8)))
+rownames(subset(total_prot_DF_resultFC26_exact, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8)))
+dim(subset(total_prot_DF_resultFC26_exact, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8)))
+```
+
+genes_group1_3CN_selec <- rownames(subset(group1_DF_resultFC2, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(1.25)))
+
+
+
+ 
+
+
+
+
+
+
+
+
+#---------------------------------------------------------------------
+
+
+
+##**Pearson correlation**
+
+
+###**for every gen CN>2 (in >20 patients):**
+
+*cnv_total_filterS_NOdup_notNA* ......falta selec >20 pat >2 CN para ser igual a cnv_total_prot_filtEXP_NOdup. (pero es igual)
+
+
+
+*Calcular la correlación de pearson entre los valores CN (cnv_total_prot_filtEXP_NOdup) y datos de expresión (expr_filter90) de cada gen según los valores de los respectivos pacientes.*
+
+cnv_total_prot_filtEXP_NOdup
+expr_filter90
+
+```{r}
+dataset_CN <- cnv_total_prot_filtEXP_NOdup #[1,]
+name_patients_CN <- substr(colnames(dataset_CN)[8:ncol(dataset_CN)], 1, 16)
+
+# Crear una lista para almacenar los resultados
+corResults <- list()
+
+# Iterar sobre los genes en cnv_total_prot_filtEXP_NOdup$gene_name
+for (gen in dataset_CN$gene_name) {
+  
+  index_row <- which(dataset_CN$gene_name == gen)
+  
+  #valores_CN <- dataset_CN[index_row, 8:ncol(dataset_CN)]
+  #valores_CN <- unname(as.vector(dataset_CN[index_row, 8:ncol(dataset_CN)]))
+  valores_CN <- unname(unlist(dataset_CN[index_row, 8:ncol(dataset_CN)]))
+  patients_expr <- expr_filter90[name_patients_CN, gen]
+
+  # Calcular la correlación de Pearson
+  correlation <- cor(valores_CN, patients_expr, use = "complete.obs")
+  
+  # Almacenar el resultado en la lista
+  corResults[[gen]] <- correlation
+}
+
+#View(corResults)
+corResults[1]
+```
+
+```{r}
+save(corResults, file = "~/vlad/TFM_bioinf/RESULTS/corResults.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/corResults.rda")
+```
+
+#####>*corResults*
+
+
+> dim(cnv_total_prot_filtEXP_NOdup)
+[1] 11795   639
+> length(corResults)
+[1] 11795 ............................................ GENES TOTALES
+
+> sum(unlist(corResults) > 0.4)
+[1] 2065
+
+> sum(corResults > 0.4, na.rm = TRUE)
+[1] 2065
+> sum(corResults > 0.5, na.rm = TRUE)
+[1] 717
+> sum(corResults > 0.6, na.rm = TRUE)
+[1] 136
+
+```{}
+corResults_0.4 <- names(corResults[corResults > 0.4 & !is.na(corResults)])
+corResults_0.6 <- names(corResults[corResults > 0.6 & !is.na(corResults)])
+```
+####*>corResults_0.6*
+####*>corResults_0.4*
+
+corplot(cor)
+
+
+
+
+
+##**Correlation VS log2(CN/2*0.8)**
+
+************************************** Comprobar los genes del vector corResults que estan en total_prot_DF_resultFC26_exact con unas condiciones p-val y foldchange:
+
+###**CN total_prot_DF_resultFC26_exact IN corResults > 0.6**
+
+```{r}
+sum(rownames(subset(total_prot_DF_resultFC26_exact, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8))) %in% names(corResults[corResults > 0.6]))
+
+sum(rownames(subset(total_prot_DF_resultFC26_exact, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8))) %in% names(corResults[corResults > 0.6]))
+
+sum(rownames(subset(total_prot_DF_resultFC26_exact, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8))) %in% names(corResults[corResults > 0.6]))
+
+sum(rownames(subset(total_prot_DF_resultFC26_exact, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8))) %in% names(corResults[corResults > 0.6]))
+
+sum(rownames(subset(total_prot_DF_resultFC26_exact, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8))) %in% names(corResults[corResults > 0.6]))
+```
+[1] 60  3CN   pvalue < 0.05 & abs(foldchanges) >= log2(3/2*0.8)
+[1] 2   4CN   pvalue < 0.05 & abs(foldchanges) >= log2(4/2*0.8)
+[1] 0   5CN   pvalue < 0.05 & abs(foldchanges) >= log2(5/2*0.8)
+[1] 2   6CN   pvalue < 0.05 & abs(foldchanges) >= log2(6/2*0.8)
+[1] 37  7CN   pvalue < 0.05 & abs(foldchanges) >= log2(7/2*0.8)
+
+
+###**CN total_prot_DF_resultFC26_exact IN corResults > 0.5**
+Sin bucle
+```{r}
+genesCN3 <- (rownames(subset(total_prot_DF_resultFC26_exact, pvalue_3 < 0.05 & abs(foldchanges_3) >= log2(3/2*0.8))) %in% names(corResults[corResults > 0.5]))
+
+genesCN4 <- (rownames(subset(total_prot_DF_resultFC26_exact, pvalue_4 < 0.05 & abs(foldchanges_4) >= log2(4/2*0.8))) %in% names(corResults[corResults > 0.5]))
+
+genesCN5 <- (rownames(subset(total_prot_DF_resultFC26_exact, pvalue_5 < 0.05 & abs(foldchanges_5) >= log2(5/2*0.8))) %in% names(corResults[corResults > 0.5]))
+
+genesCN6 <- (rownames(subset(total_prot_DF_resultFC26_exact, pvalue_6 < 0.05 & abs(foldchanges_6) >= log2(6/2*0.8))) %in% names(corResults[corResults > 0.5]))
+
+genesCN7 <- (rownames(subset(total_prot_DF_resultFC26_exact, pvalue_7 < 0.05 & abs(foldchanges_7) >= log2(7/2*0.8))) %in% names(corResults[corResults > 0.5]))
+
+sum(genesCN3)
+sum(genesCN4)
+sum(genesCN5)
+sum(genesCN6)
+sum(genesCN7)
+
+```
+[1] 248
+[1] 14
+[1] 11
+[1] 9
+[1] 107
+
+
+Con bucle
+```{r}
+# Vectores para almacenar los resultados
+genesCN_list <- list()
+
+for (CN in 3:7) {
+  # Definir las condiciones
+  pvalue_condition <- total_prot_DF_resultFC26_exact[, paste("pvalue_", CN, sep = "")] < 0.05
+  foldchanges_condition <- abs(total_prot_DF_resultFC26_exact[, paste("foldchanges_", CN, sep = "")]) >= log2(CN/2*0.8)
+  
+  # Filtrar el dataframe según las condiciones
+  subset_genes <- total_prot_DF_resultFC26_exact[pvalue_condition & foldchanges_condition, ]
+  
+  # Obtener los nombres de los genes que coinciden con corResults
+  genesCN <- intersect(rownames(subset_genes), names(corResults[corResults > 0.5]))
+  
+  # Almacenar el resultado en la lista
+  genesCN_list[[paste("genesCN", CN, sep = "_")]] <- genesCN
+  
+  # Obtener el número de nombres de genes que coinciden con corResults
+  num_genes <- length(genesCN)
+  
+  # Imprimir el resultado
+  cat("Genes  CN =", CN, "in corResults 0.5:", num_genes, "\n")
+}
+```
+
+
+Listado de genes de corResults_0.5 en total_prot_DF_resultFC26_exact:
+```{r}
+genes_cor0.5_exact <- unique(unlist(genesCN_list))
+length(genes_cor0.5_exact)
+```
+###>*genes_cor0.5_exact*
+
+```{r}
+sum(corResults > 0.5, na.rm = TRUE)
+length(corResults_0.6)
+length(intersect(genes_cor0.5_exact,corResults_0.6))
+```
+
+###**CN total_prot_DF_resultFC26_exact CN>4  IN corResults > 0.4**
+*Utilizaremos la selección de genes high CN(5/6/7) de cuya intersección con corResults_0.4 obtendremos la selección de genes que utilizaremos para examinar los boxplot*
+
+p-valor<0.5 entre pacientes 2CN vs 5/6/7CN
+foldchanges >=log2(CN/2*0.8)
+
+Con bucle
+```{r}
+# Vectores para almacenar los resultados
+genesCN_list <- list()
+
+for (CN in 5:7) {
+  # Definir las condiciones
+  pvalue_condition <- total_prot_DF_resultFC26_exact[, paste("pvalue_", CN, sep = "")] < 0.05
+  foldchanges_condition <- abs(total_prot_DF_resultFC26_exact[, paste("foldchanges_", CN, sep = "")]) >= log2(CN/2*0.8)
+  
+  # Filtrar el dataframe según las condiciones
+  subset_genes <- total_prot_DF_resultFC26_exact[pvalue_condition & foldchanges_condition, ]
+  
+  # Obtener los nombres de los genes que coinciden con corResults
+  genesCN <- intersect(rownames(subset_genes), names(corResults[corResults > 0.4]))
+  
+  # Almacenar el resultado en la lista
+  genesCN_list[[paste("genesCN", CN, sep = "_")]] <- genesCN
+  
+  # Obtener el número de nombres de genes que coinciden con corResults
+  num_genes <- length(genesCN)
+  
+  # Imprimir el resultado
+  cat("Genes  CN =", CN, "in corResults 0.4:", num_genes, "\n")
+}
+```
+
+
+```{r}
+genes_cor0.4_exact <- unique(unlist(genesCN_list))
+length(genes_cor0.4_exact)
+```
+####>*genes_cor0.4_exact*----------------------
+..........................165 genes seleccionados con CN>4  ....es decir (5/6/7)
+
+
+
+
+
+# **BOXPLOTS CN_expr**
+
+*Boxplot con la expresión de todos los genes >20 pacientes según los diferentes niveles CN (desde 1 a 7)*
+cnv_total_filterS_NOdup_notNA
+
+
+## **BOXPLOT CN_expr (Total genes)**
+
+***************************** LISTA DE VECTORES (definifiva)
+
+```{r}
+############################### get lista_CN_expr
+dataset_genes <- cnv_total_filterS_NOdup_notNA
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+
+#pdf("~/vlad/TFM_bioinf/IMG/total_prot_DF_exact_allBOXPLOT.pdf", width=6, height=10)
+#par(mfrow = c(1, 7), mar = c(3, 3, 2, 2))
+
+lista_CN_expr <- list()
+
+for (cnv_number in 1:7) {
+  expr_vector <- numeric()
+  
+  for (gen_actual in dataset_genes$gene_name) {
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+    patients_sameCN <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+    allExprCN <- log2(expr_filter90[substr(patients_sameCN, 1, 16), gen_actual] + 1)
+    
+    expr_vector <- c(expr_vector, allExprCN)
+  }
+  
+  #lista_CN_expr[[paste("expr_CN", cnv_number, sep = "")]] <- expr_list
+  lista_CN_expr[[cnv_number]] <- expr_vector
+}
+
+
+####################################################
+lista_CN_exprTOTAL <- lista_CN_expr
+########################################################
+
+
+
+################################# get Boxplot
+
+# boxplot(lista_CN_expr, main = paste("CNV =", cnv_number), ylab = "Expresión (log2)")
+pdf("~/vlad/TFM_bioinf/IMG/total_prot_DF_exact_allBOXPLOT.pdf", width = 5, height = 5.5)
+
+# Configuración del diseño del gráfico
+par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 2, 0))
+
+# Crear el boxplot combinado
+boxplot(lista_CN_exprTOTAL,
+        main = "Expresion of total genes by CNV",
+        xlab = "CNV",
+        ylab = "Expresion (log2)",
+        #col = colors,
+        border = "black")
+
+# Cerrar el dispositivo PDF
+dev.off()
+
+
+```
+
+######>**lista_CN_exprTOTAL**
+
+```{r}
+save(lista_CN_exprTOTAL, file = "~/vlad/TFM_bioinf/RESULTS/lista_CN_exprTOTAL.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/lista_CN_exprTOTAL.rda")
+```
+
+
+
+
+
+
+## **BOXPLOT CN_expr (Total genes selec)**
+*Un único gráfico con la expresión de todos los genes seleccionados según CN*
+*genes_cor0.4_exact*
+
+```{r}
+############################### get lista_CN_expr
+dataset_genes <- cnv_total_filterS_NOdup_notNA
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+
+#pdf("~/vlad/TFM_bioinf/IMG/total_prot_DF_exact_allBOXPLOT.pdf", width=6, height=10)
+#par(mfrow = c(1, 7), mar = c(3, 3, 2, 2))
+
+lista_CN_expr <- list()
+
+for (cnv_number in 1:7) {
+  expr_vector <- numeric()
+  
+  for (gen_actual in genes_cor0.4_exact) {
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+    patients_sameCN <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+    allExprCN <- log2(expr_filter90[substr(patients_sameCN, 1, 16), gen_actual] + 1)
+    
+    expr_vector <- c(expr_vector, allExprCN)
+  }
+  
+  #lista_CN_expr[[paste("expr_CN", cnv_number, sep = "")]] <- expr_list
+  lista_CN_expr[[cnv_number]] <- expr_vector
+}
+
+
+
+
+
+
+################################# get Boxplot
+
+# boxplot(lista_CN_expr, main = paste("CNV =", cnv_number), ylab = "Expresión (log2)")
+pdf("~/vlad/TFM_bioinf/IMG/total_prot_DF_exact_allBOXPLOT_genesCor4.pdf", width = 5, height = 5.5)
+
+# Configuración del diseño del gráfico
+par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 2, 0))
+
+# Crear el boxplot combinado
+boxplot(lista_CN_expr,
+        main = "Expresion of selected genes by CNV",
+        xlab = "CNV",
+        ylab = "Expresión (log2)",
+        #col = colors,
+        border = "black")
+
+# Cerrar el dispositivo PDF
+dev.off()
+
+#lista_CN_exprGenes_cor4 <- lista_CN_expr
+```
+
+######>**lista_CN_exprGenes_cor4**
+
+```{r}
+save(lista_CN_exprGenes_cor4, file = "~/vlad/TFM_bioinf/RESULTS/lista_CN_exprGenes_cor4.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/lista_CN_exprTOTAL.rda")
+```
+
+
+
+
+
+## **BOXPLOT CN_expr genes selec cor0.4**
+*genes_cor0.4_exact*...Un boxplot por gen.
+
+BOXPLOT GENES 1 pdf
+```{r}
+#genes_cor0.4_exact_sorted <- sort(genes_cor0.4_exact)
+
+############################################## get lista_CN_expr
+dataset_genes <- cnv_total_filterS_NOdup_notNA
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+
+pdf("~/vlad/TFM_bioinf/IMG/BOXPLOT_genesCor4.pdf", width = 7.8, height = 12)
+par(mfrow = c(3, 4), mar = c(6, 3, 3, 1) + 0.1, oma = c(1, 1, 1, 1))
+
+for (gen_actual in sort(genes_cor0.4_exact)) {
+  lista_CN_expr <- list()  # Iniciar lista para cada iteración
+  
+  for (cnv_number in 1:7) {
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+    patients_sameCN <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+    allExprCN <- log2(expr_filter90[substr(patients_sameCN, 1, 16), gen_actual] + 1)
+    
+    lista_CN_expr[[cnv_number]] <- allExprCN
+  }
+  
+############################################## BOXPLOT 
+  boxplot(lista_CN_expr,
+          main = paste("Expression", gen_actual, "by CN"),
+          cex.main = 1,
+          xlab = "CN",
+          ylab = "",
+          border = "black"
+          #names = paste(1:7, "\n", sapply(lista_CN_expr, length))
+          )
+  # Agrega los nombres del eje x debajo de cada boxplot
+  axis(side = 1, at = 1:7,
+       labels = sapply(lista_CN_expr, length),
+       las = 1, cex.axis = 0.6, padj = 2)
+  mtext("Patients:", side = 1, line = 1.75, at = -0.4, cex = 0.5)
+  
+  title(ylab = "Expression (log2)", line = 2, adj = 0.5)
+  
+  # Ajustar la posición de la etiqueta del eje x
+  #title(xlab = "CNV", line = 2.5, adj = 0.5)
+  
+  # x_labels <- paste(1:7, "\n", sapply(lista_CN_expr, length))
+  # mtext(side = 1, text = x_labels, at = 1:7, las = 1, cex = 0.5, line = 0.6)
+    
+  # Añadir el número de observaciones debajo de cada caja
+  #text(1:7, -0.1, labels = paste("n =", sapply(lista_CN_expr, length)), pos = 1, cex = 0.8)
+  #text(1:7, par("usr")[3] - 0.05, labels = paste("n =", sapply(lista_CN_expr, length)), pos = 1, cex = 0.8)
+}
+
+dev.off() # Cerrar el dispositivo PDF después del bucle
+```
+
+######>*BOXPLOT_genesCor4.pdf*
+
+
+
+*Se observa como en numerosos genes, la expresión aumenta progresivamente hasta 6CN, produciendose un aumento proporcionalmente considerable de esta en 7CN.*
+
+*Además, para 6CN encontramos un número menor de pacientes aunque un número similar de genes que en 7CN. La expresión de los pacientes con 6CN es, en cierto número de genes, menor que para 5CN.*
+
+*Se observan genes donde hay un salto cuantitativo de la expresión a partir de un determinado  CN. Esto podría deberse a la existencia de un umbral de copias a partir de cual la expresión se incrementa* 
+
+*Mediante la asignación de la superviencia de los pacientes abajo/arriba de un umbral de copias o de los diferentes grupos de pacientes según el número de copias, podríamos establecer si estos echos tienen relevancia clínica y plantearnos si tiene sentido profundizar en ellos.* ...esto también podría hacerse en el boxplot de la metilación.
+
+
+
+
+
+# 2.4.**Lost**
+
+# **Total genes >=20 patients + <2 cnv**
+
+Genes >=20 patients with values <2:
+```{r}
+columsPatients <- cnv_total_filter[, 8:ncol(cnv_total_filter)]
+genes_selec1 <- cnv_total_filter[rowSums(columsPatients < 2 & !is.na(columsPatients)) >= 20, ]
+genes_selec0 <- cnv_total_filter[rowSums(columsPatients < 1 & !is.na(columsPatients)) >= 20, ]
+
+dim(cnv_total_filter)
+dim(genes_selec1)
+dim(genes_selec0)
+```
+[1] 60623   639
+[1] 45515   639
+
+"Total genes >=20 patients <2 gene copies are 45515"
+
+
+*cnv_total_filterS_NOdup* ...en filtrado genes (Linea 610)
+
+```{r}
+columsPatients <- cnv_total_filterS_NOdup[, 8:ncol(cnv_total_filterS_NOdup)]
+#cnv_total_filter[rowSums(columsPatients > 2 & !is.na(columsPatients)) >= 20, ]
+#cnv_total_filter[rowSums(columsPatients > 2 & !is.na(columsPatients)), "gene_name"]
+#cnv_total_filter[rowSums(patient_data != 2 & !is.na(patient_data)) >= 20, "gene_name"]
+selected_genes_lost <- cnv_total_filterS_NOdup[rowSums(columsPatients < 2 & !is.na(columsPatients)) >= 20, "gene_name"]
+
+length(selected_genes_lost)
+dim(cnv_total_filterS_NOdup)
+```
+###>*selected_genes_lost*
+
+
+#**Dataframe selected_genes_lost
+```{r}
+DFcnv_geneslost <- subset(cnv_total_filterS_NOdup, gene_name %in% selected_genes_lost)
+dim(DFcnv_geneslost)
+```
+
+###>*DFcnv_geneslost*
+
+```{r}
+save(DFcnv_geneslost, file = "~/vlad/TFM_bioinf/RESULTS/DFcnv_geneslost.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/DFcnv_geneslost.rda")
+```
+
+
+*******************************************************
+****************************************
+
+cnv_total_filterS_NOdup_notNA
+```{r}
+columsPatients <- cnv_total_filterS_NOdup_notNA[, 8:ncol(cnv_total_filterS_NOdup_notNA)]
+cnv_lost <- cnv_total_filterS_NOdup_notNA[rowSums(columsPatients < 2 & !is.na(columsPatients)) >= 20, ]
+
+dim(cnv_total_filterS_NOdup_notNA)
+dim(cnv_lost)
+```
+"Total genes >=20 patients <2 gene copies are 9535"
+
+
+
+# **Get pval/FC LOOP**
+*20 patients + 1 CN*
+```{r}
+dataset_genes <- cnv_lost
+
+# Obtén las columnas de pacientes
+col_patients_dataset_genes <- dataset_genes[, 8:ncol(dataset_genes)]
+  
+# Inicializa un dataframe vacío para almacenar los resultados
+cnv_lost_DF_resultFC <- data.frame(row.names = dataset_genes$gene_name, stringsAsFactors = FALSE)
+
+for (cnv_number in 1) {
+  
+  # Crea nombres de columnas específicos para cada valor de cnv_number
+  pvalue_col <- paste("pvalue_", cnv_number, sep = "")
+  foldchanges_col <- paste("foldchanges_", cnv_number, sep = "")
+  
+  # Itera sobre cada gen 
+  for (gen_actual in dataset_genes$gene_name) {
+    
+    # Encuentra el índice de la fila donde el gen es el actual
+    indice_gen <- which(dataset_genes$gene_name == gen_actual)
+  
+    # Obtén los pacientes con valores mayores a ........ x
+    patients_mayor2 <- colnames(col_patients_dataset_genes)[which(col_patients_dataset_genes[indice_gen, ] == cnv_number)]
+  
+    
+    # Calculate pvalue only if there are at least 20 patients with values greater than x
+    if (length(patients_mayor2) >= 20) {
+      
+      # Obtén los pacientes con valores iguales a 2 para el gen actual
+      patients_igual2 <- colnames(col_patients_dataset_genes)[col_patients_dataset_genes[indice_gen, ] == 2]
+  
+      # Expresión de todos los pacientes para el gen actual
+      allExprEqual2 <- log2(expr_filter90[substr(patients_igual2, 1, 16), gen_actual] + 1)
+      allExprMore2 <- log2(expr_filter90[substr(patients_mayor2, 1, 16), gen_actual] + 1)
+      #allExprMore2 = allExprEqual1
+      
+      # Calculate pvalue
+      pvalue <- t.test(allExprEqual2, allExprMore2)$p.value
+      # Calcula el cambio plegado para el gen actual, CAMBIAMOS DE ORDEN LA RESTA!!!
+      foldchangesActual <- mean(allExprEqual2, na.rm = TRUE) - mean(allExprMore2, na.rm = TRUE)
+      
+    } else {
+      # Si hay menos de 20 pacientes, asigna NA a pvalue y foldchangesActual
+      pvalue <- NA
+      foldchangesActual <- NA
+    }
+
+    # Añade los resultados al dataframe en las columnas específicas
+    cnv_lost_DF_resultFC[gen_actual, pvalue_col] <- pvalue
+    cnv_lost_DF_resultFC[gen_actual, foldchanges_col] <- foldchangesActual
+}
+}
+
+View(cnv_lost_DF_resultFC)
+
+dim(cnv_lost_DF_resultFC)
+```
+
+
+######>*cnv_lost_DF_resultFC*
+
+> dim(cnv_lost_DF_resultFC)
+[1] 9535    2
+
+```{r}
+save(cnv_lost_DF_resultFC, file = "~/vlad/TFM_bioinf/RESULTS/cnv_lost_DF_resultFC.rda")
+#load("~/vlad/TFM_bioinf/RESULTS/cnv_lost_DF_resultFC.rda")
+```
+
+
+valores negativos en columna foldchanges
+```{r}
+# Obtener las columnas relevantes
+relevant_columns <- grep("^foldchanges_.$", colnames(cnv_lost_DF_resultFC))
+
+# Crear un vector con el número de veces que hay valores negativos en cada columna relevante
+neg_count_vector <- sapply(cnv_lost_DF_resultFC[, relevant_columns], function(col) sum(col < 0, na.rm = TRUE))
+
+sum(neg_count_vector)
+```
+
+Filas con NA:
+```{r}
+numero_filas_con_na <- sum(rowSums(is.na(cnv_lost_DF_resultFC)) > 0)
+cat("Número de filas con al menos una columna con NA:", numero_filas_con_na, "\n")
+```
+
+Total
+```{r}
+dim(subset(cnv_lost_DF_resultFC, pvalue_1 < 0.05 & abs(foldchanges_1) >= log2(1/2*1.2)))
+```
+*7133 genes con 1 CN + pval y foldchanges significativo.* 
+
+Only positive 
+```{r}
+dim(subset(cnv_lost_DF_resultFC, pvalue_1 < 0.05 & foldchanges_1 >= log2(1/2*1.2)))
+```
+*7090  genes con 1 CN + pval y foldchanges significativo (VALOR POSITIVO)* 
+
+*Los genes cuya expresión no se ve alterada (no significativos) por la pérdida de una copia, podrían encontrarse metilados cuando tienen dos copias o alcanzar los niveles "básicos" de expresión (existiendo una regulación génica a partir de cierto umbral) con una sola de las copias.*
+
+*7133-7090= 43 genes cuya expresión incrementa con una sola de las copias. Podría deberse a una autoregulación negativa*
+
+
+
+****************************************
+*******************************************************
+
+
+
+# **Histogram protein genes lost**
+
+*Get genes <2 cnv ordered by patients*
+```{r}
+columsPatients <- cnv_lost[, 8:ncol(cnv_lost)]
+
+gene_counts <- rowSums(columsPatients < 2, na.rm = TRUE)
+selected_genes <- cnv_lost$gene_name
+genesDF_lost <- data.frame(gene_name = selected_genes, count = gene_counts)
+```
+
+
+```{r}
+# Eliminamos los genes con menos de 20 pacientes para facilitar visualización
+filtered_result1 <- genesDF_lost[genesDF_lost$count > 19, ]
+# Crear un histograma con los genes filtrados
+hist(filtered_result1$count, breaks = 275, col = "blue", 
+     ylab = "Nº de genes <2 copies", xlab = "Nº patients <2 copies per gene", 
+     main = "Frequency of genes by number of patients <2 copies",
+     ylim = c(0, 300))
+```
+
+
+
+
+
+
+
